@@ -637,10 +637,8 @@ async def cmd_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown")
     try:
         report_fr = build_report(session, "fr")
-        report_en = build_report(session, "en")
-        await update.message.reply_document(open(report_fr,"rb"), filename=report_fr.name, caption="🇫🇷 French Report")
-        await update.message.reply_document(open(report_en,"rb"), filename=report_en.name, caption="🇬🇧 English Report")
-        await update.message.reply_text("✅ Done! Both reports sent.\nType /start for a new inspection.")
+        await update.message.reply_document(open(report_fr,"rb"), filename=report_fr.name, caption="🇫🇷 Rapport français")
+        await update.message.reply_text("✅ Rapport envoyé!\nType /start for a new inspection.")
     except Exception as e:
         log.error(f"Report error: {e}")
         await update.message.reply_text(f"❌ Error: {e}")
