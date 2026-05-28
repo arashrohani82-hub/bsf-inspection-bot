@@ -37,9 +37,10 @@ anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
     STATE_GROUP_CAPTION_FR,
     STATE_GROUP_CAPTION_EN,
     STATE_ELEMENT_TYPE,
+    STATE_ELEMENT_ID,
     STATE_LOCATION,
     STATE_PROBLEM,
-) = range(11)
+) = range(12)
 
 ELEMENT_TYPES = [
     ["Anchor", "Davit"],
@@ -534,20 +535,35 @@ async def got_group_or_add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             reply_markup=ReplyKeyboardMarkup(ELEMENT_TYPES, one_time_keyboard=True, resize_keyboard=True))
         return STATE_ELEMENT_TYPE
 
-async def got_element_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    ctx.user_data["element_type"] = update.message.text.strip()
-    await update.message.reply_text(
-        "📌 Where exactly in the structure?\n\n_e.g. Roof NE corner · Anchor #5 · Level 12_",
-        parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
-    return STATE_LOCATION
+ELEMENT_ID_QUESTIONS = {
+    "Anchor":        "🔢 *Anchor number?*\n\n_e.g. AB1 · AB-05 · AN2…_",
+    "Davit":         "🔢 *Davit number?*\n\n_e.g. D1 · D-03 · Bossoir #2…_",
+    "Cable":         "🔢 *Cable / lifeline ID?*\n\n_e.g. C1 · Câble Nord…_",
+    "Base / Socket": "🔢 *Base / socket number?*\n\n_e.g. S1 · Socle #3…_",
+    "Facade":        "📍 *Facade zone?*\n\n_e.g. North · Level 5 · Grid B…_",
+    "Roof":          "📍 *Roof zone?*\n\n_e.g. NE corner · Near stairwell…_",
+    "Other":         "📍 *Describe the location:*\n\n_e.g. Mechanical room · Level 3…_",
+}
 
-async def got_location(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    ctx.user_data["location"] = update.message.text.strip()
+async def got_element_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    element = update.message.text.strip()
+    ctx.user_data["element_type"] = element
+    question = ELEMENT_ID_QUESTIONS.get(element, "📍 *Element ID / number?*")
+    await update.message.reply_text(question, parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
+    return STATE_ELEMENT_ID
+
+async def got_element_id(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    element_id = update.message.text.strip()
+    element    = ctx.user_data.get("element_type", "")
+    # Build location string automatically
+    ctx.user_data["location"] = f"{element} {element_id}"
     await update.message.reply_text(
         "🔍 Describe the observation for this group, or tap the button if no visible issue.",
         parse_mode="Markdown",
         reply_markup=ReplyKeyboardMarkup([["⏭ No visible issue"]], one_time_keyboard=True, resize_keyboard=True))
     return STATE_PROBLEM
+
+
 
 async def got_problem(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -671,7 +687,7 @@ def main():
                                     CommandHandler("done", cmd_done)],
             STATE_GROUP_OR_ADD:    [MessageHandler(filters.TEXT & ~filters.COMMAND, got_group_or_add)],
             STATE_ELEMENT_TYPE:    [MessageHandler(filters.TEXT & ~filters.COMMAND, got_element_type)],
-            STATE_LOCATION:        [MessageHandler(filters.TEXT & ~filters.COMMAND, got_location)],
+            STATE_ELEMENT_ID:      [MessageHandler(filters.TEXT & ~filters.COMMAND, got_element_id)],
             STATE_PROBLEM:         [MessageHandler(filters.TEXT & ~filters.COMMAND, got_problem)],
             STATE_GROUP_CAPTION_FR:[MessageHandler(filters.TEXT & ~filters.COMMAND, got_group_caption_fr)],
             STATE_GROUP_CAPTION_EN:[MessageHandler(filters.TEXT & ~filters.COMMAND, got_group_caption_en)],
