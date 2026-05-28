@@ -165,17 +165,22 @@ def insert_photos_vertical(doc, anchor_elem, photos, lang, img_width=5.5):
 
 
 # ── Add label to image ─────────────────────────────────────────────────────
-def add_label_to_image(img_path, label, output_path):
-    """Add a white box with label text (e.g. '1a') to top-left corner."""
+def add_label_to_image(img_path, label, output_path, display_width_px=800):
+    """Resize image to standard width, add large label, save."""
     from PIL import Image, ImageDraw, ImageFont
-    import io
-    img  = Image.open(img_path).convert("RGB")
+    img = Image.open(img_path).convert("RGB")
+    # Resize to standard display width (preserving aspect ratio)
+    ratio = display_width_px / img.width
+    new_h = int(img.height * ratio)
+    img = img.resize((display_width_px, new_h), Image.LANCZOS)
     draw = ImageDraw.Draw(img)
+    # Label = 1/5 of display width — always large and clear
+    font_size = display_width_px // 5
     try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
     except:
         font = ImageFont.load_default()
-    pad  = 10
+    pad  = font_size // 4
     bbox = draw.textbbox((0, 0), label, font=font)
     w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
     draw.rectangle([0, 0, w + pad*2, h + pad*2], fill="white")
@@ -418,8 +423,9 @@ async def got_address(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     session["address"] = update.message.text.strip()
     save_session(chat_id, session)
     await update.message.reply_text(
-        "🗺 Do you have *floor plans* to attach?\n\nSend plan photos or type *skip*.",
-        parse_mode="Markdown")
+        "🗺 Do you have *floor plans* to attach?",
+        parse_mode="Markdown",
+        reply_markup=ReplyKeyboardMarkup([["📎 Send plans", "⏭ Skip plans"]], one_time_keyboard=True, resize_keyboard=True))
     return STATE_PLANS
 
 async def got_plan_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -435,16 +441,21 @@ async def got_plan_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     }})
     save_session(chat_id, session)
     await update.message.reply_text(
-        f"✅ Plan {plan_idx} saved! Send another or type *skip*.", parse_mode="Markdown")
+        f"✅ Plan {plan_idx} saved!",
+        reply_markup=ReplyKeyboardMarkup([["📎 Send another plan", "⏭ Done with plans"]], one_time_keyboard=True, resize_keyboard=True))
     return STATE_PLANS
 
 async def got_plan_skip(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if update.message.text.strip().lower() == "skip":
+    text = update.message.text.strip().lower()
+    if "skip" in text or "plans" not in text:
         await update.message.reply_text(
-            "🔩 Do you have a *davit detail drawing*?\n\nSend a photo or type *skip*.",
-            parse_mode="Markdown")
+            "🔩 Do you have a *davit detail drawing*?",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardMarkup([["📎 Send davit detail", "⏭ Skip davit detail"]], one_time_keyboard=True, resize_keyboard=True))
         return STATE_DAVIT_DETAIL
-    await update.message.reply_text("Send a plan photo or type *skip*.", parse_mode="Markdown")
+    await update.message.reply_text(
+        "✅ Send the plan photo now, or tap Skip.",
+        reply_markup=ReplyKeyboardMarkup([["⏭ Skip plans"]], one_time_keyboard=True, resize_keyboard=True))
     return STATE_PLANS
 
 async def got_davit_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -460,11 +471,16 @@ async def got_davit_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     return STATE_PHOTO
 
 async def got_davit_skip(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if update.message.text.strip().lower() == "skip":
+    text = update.message.text.strip().lower()
+    if "skip" in text or "davit" not in text:
         await update.message.reply_text(
-            "📸 Send the *first inspection photo*.", parse_mode="Markdown")
+            "📸 Send the *first inspection photo*.",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardRemove())
         return STATE_PHOTO
-    await update.message.reply_text("Send a davit photo or type *skip*.", parse_mode="Markdown")
+    await update.message.reply_text(
+        "Send the davit detail photo, or tap Skip.",
+        reply_markup=ReplyKeyboardMarkup([["⏭ Skip davit detail"]], one_time_keyboard=True, resize_keyboard=True))
     return STATE_DAVIT_DETAIL
 
 async def got_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -528,15 +544,16 @@ async def got_element_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def got_location(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data["location"] = update.message.text.strip()
     await update.message.reply_text(
-        "🔍 Describe the observation for this group.\n\n_Type *skip* if no visible issue._",
-        parse_mode="Markdown")
+        "🔍 Describe the observation for this group, or tap the button if no visible issue.",
+        parse_mode="Markdown",
+        reply_markup=ReplyKeyboardMarkup([["⏭ No visible issue"]], one_time_keyboard=True, resize_keyboard=True))
     return STATE_PROBLEM
 
 async def got_problem(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     session = load_session(chat_id)
     problem = update.message.text.strip()
-    if problem.lower() == "skip": problem = ""
+    if problem.lower() in ("skip", "⏭ no visible issue", "no visible issue"): problem = ""
 
     await update.message.reply_text("🤖 Analysing photo with AI…")
     try:
