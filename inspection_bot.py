@@ -1,13 +1,10 @@
 """
 BSF Inspections – Telegram Report Bot
-Structural inspection assistant that collects photos on-site,
-generates bilingual (FR/EN) captions, and builds a Word report.
 """
 
 import os
 import json
 import logging
-import asyncio
 from datetime import datetime
 from pathlib import Path
 import anthropic
@@ -18,11 +15,11 @@ from telegram.ext import (
 )
 from docx import Document
 from docx.shared import Inches, Pt
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
+import copy
 
-logging.basicConfig(
-    format="%(asctime)s │ %(levelname)s │ %(message)s",
-    level=logging.INFO
-)
+logging.basicConfig(format="%(asctime)s | %(levelname)s | %(message)s", level=logging.INFO)
 log = logging.getLogger(__name__)
 
 TELEGRAM_TOKEN   = os.environ["TELEGRAM_TOKEN"]
@@ -54,14 +51,14 @@ SEVERITY_MAP = {
     "ok":       "✅ OK / Acceptable",
 }
 
-SESSIONS_DIR  = Path("/app/sessions");  SESSIONS_DIR.mkdir(exist_ok=True)
-PHOTOS_DIR    = Path("/app/photos");    PHOTOS_DIR.mkdir(exist_ok=True)
-REPORTS_DIR   = Path("/app/reports");   REPORTS_DIR.mkdir(exist_ok=True)
-TEMPLATE_PATH = Path("/app/Template.docx")
+BASE_DIR      = Path("/app")
+SESSIONS_DIR  = BASE_DIR / "sessions";  SESSIONS_DIR.mkdir(exist_ok=True)
+PHOTOS_DIR    = BASE_DIR / "photos";    PHOTOS_DIR.mkdir(exist_ok=True)
+REPORTS_DIR   = BASE_DIR / "reports";   REPORTS_DIR.mkdir(exist_ok=True)
+TEMPLATE_PATH = BASE_DIR / "Template.docx"
 
 
 # ── Session helpers ────────────────────────────────────────────────────────
-
 def session_path(chat_id): return SESSIONS_DIR / f"{chat_id}.json"
 def load_session(chat_id):
     p = session_path(chat_id)
@@ -74,7 +71,6 @@ def clear_session(chat_id):
 
 
 # ── Claude Vision ──────────────────────────────────────────────────────────
-
 def analyse_photo(image_bytes, element_type, location, problem):
     import base64
     b64 = base64.standard_b64encode(image_bytes).decode()
@@ -88,7 +84,7 @@ Context:
 
 Tasks:
 1. Analyse the photo carefully.
-2. Identify the defect or condition (corrosion, crack, deformation, missing component, etc.)
+2. Identify the defect or condition.
 3. Assign severity: critical | major | moderate | minor | ok
 4. Write a SHORT professional caption in French (≤ 25 words).
 5. Write the SAME caption in English (≤ 25 words).
@@ -119,6 +115,24 @@ Respond ONLY with valid JSON, no markdown, no preamble:
 
 
 # ── Report builder ─────────────────────────────────────────────────────────
+def add_paragraph_after(doc, ref_paragraph, text="", style=None):
+    """Insert a new paragraph after ref_paragraph and return it."""
+    new_para = OxmlElement("w:p")
+    ref_paragraph._element.addnext(new_para)
+    # Find the newly inserted paragraph object
+    for i, p in enumerate(doc.paragraphs):
+        if p._element is new_para:
+            if style:
+                p.style = style
+            if text:
+                p.add_run(text)
+            return p
+    # Fallback: just append
+    p = doc.add_paragraph(text)
+    if style:
+        p.style = style
+    return p
+
 
 def build_report(session, lang):
     doc     = Document(TEMPLATE_PATH)
@@ -150,53 +164,65 @@ def build_report(session, lang):
                 for para in cell.paragraphs:
                     replace_para(para)
 
-    # Find {{Photos}} anchor
-    from docx.oxml import OxmlElement
+    # Find {{Photos}} placeholder paragraph
     photos_para = None
     for para in doc.paragraphs:
-        if "{{Photos }}" in para.text or "{{Photos}}" in para.text:
+        if "{{Photos" in para.text:
             photos_para = para
-            para.clear()
             break
 
-    if photos_para is not None:
-        anchor = photos_para._element
-        for idx, photo in enumerate(photos, start=1):
-            caption_key = "caption_fr" if lang == "fr" else "caption_en"
-            detail_key  = "detail_fr"  if lang == "fr" else "detail_en"
-            ai          = photo.get("ai", {})
-            caption     = ai.get(caption_key, "")
-            detail      = ai.get(detail_key, "")
-            severity    = SEVERITY_MAP.get(ai.get("severity", "ok"), "")
+    if photos_para is None:
+        # Append at end if placeholder not found
+        photos_para = doc.add_paragraph()
 
-            # Image
-            img_p = OxmlElement("w:p")
-            anchor.addnext(img_p)
-            real_p = doc.paragraphs[doc.paragraphs.index(photos_para) + 1]
-            run = real_p.add_run()
-            img_path = photo.get("path")
-            if img_path and Path(img_path).exists():
-                try:
-                    run.add_picture(img_path, width=Inches(5.5))
-                except Exception:
-                    run.text = "[image not available]"
-            else:
-                run.text = "[image not available]"
+    # Clear placeholder text
+    for run in photos_para.runs:
+        run.text = ""
 
-            # Caption
-            cap_p = doc.add_paragraph()
-            r = cap_p.add_run(f"Fig. {idx} – {caption}")
-            r.italic = True; r.font.size = Pt(10)
+    # Insert photos in reverse order (each addnext goes after the anchor)
+    for idx, photo in enumerate(reversed(photos), start=1):
+        real_idx  = len(photos) - idx + 1
+        caption_k = "caption_fr" if lang == "fr" else "caption_en"
+        detail_k  = "detail_fr"  if lang == "fr" else "detail_en"
+        ai        = photo.get("ai", {})
+        caption   = ai.get(caption_k, "")
+        detail    = ai.get(detail_k, "")
+        severity  = SEVERITY_MAP.get(ai.get("severity", "ok"), "")
 
-            # Severity + detail
-            sev_p = doc.add_paragraph()
-            r2 = sev_p.add_run(f"Severity: {severity}   |   {detail}")
-            r2.font.size = Pt(9)
+        # 3. Severity line
+        sev_p = OxmlElement("w:p")
+        photos_para._element.addnext(sev_p)
+        # find it and add text
+        for p in doc.paragraphs:
+            if p._element is sev_p:
+                r = p.add_run(f"Severity: {severity}   |   {detail}")
+                r.font.size = Pt(9)
+                break
 
-            body = doc._body._body
-            for new_p in [cap_p._element, sev_p._element]:
-                body.remove(new_p)
-                real_p._element.addnext(new_p)
+        # 2. Caption line
+        cap_p = OxmlElement("w:p")
+        photos_para._element.addnext(cap_p)
+        for p in doc.paragraphs:
+            if p._element is cap_p:
+                r = p.add_run(f"Fig. {real_idx} – {caption}")
+                r.italic = True
+                r.font.size = Pt(10)
+                break
+
+        # 1. Image
+        img_p = OxmlElement("w:p")
+        photos_para._element.addnext(img_p)
+        for p in doc.paragraphs:
+            if p._element is img_p:
+                img_path = photo.get("path")
+                if img_path and Path(img_path).exists():
+                    try:
+                        p.add_run().add_picture(img_path, width=Inches(5.5))
+                    except Exception as e:
+                        p.add_run(f"[image error: {e}]")
+                else:
+                    p.add_run("[image not available]")
+                break
 
     suffix = "FR" if lang == "fr" else "EN"
     fname  = f"{project.replace(' ','_')}_{date}_{suffix}.docx"
@@ -236,10 +262,7 @@ async def got_address(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     session = load_session(chat_id)
     session["address"] = update.message.text.strip()
     save_session(chat_id, session)
-    await update.message.reply_text(
-        "✅ Project info saved!\n\n📸 Send the *first photo*.",
-        parse_mode="Markdown",
-    )
+    await update.message.reply_text("✅ Project info saved!\n\n📸 Send the *first photo*.", parse_mode="Markdown")
     return STATE_PHOTO
 
 
@@ -273,8 +296,7 @@ async def got_element_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def got_location(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data["location"] = update.message.text.strip()
     await update.message.reply_text(
-        "🔍 Describe the problem observed.\n\n"
-        "_Type *skip* if there is no visible issue._",
+        "🔍 Describe the problem observed.\n\n_Type *skip* if there is no visible issue._",
         parse_mode="Markdown",
     )
     return STATE_PROBLEM
@@ -316,12 +338,8 @@ async def got_problem(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "Do you accept this caption?"
     )
     await update.message.reply_text(
-        msg,
-        parse_mode="Markdown",
-        reply_markup=ReplyKeyboardMarkup(
-            [["✅ Accept", "✏️ Edit"]],
-            one_time_keyboard=True, resize_keyboard=True,
-        ),
+        msg, parse_mode="Markdown",
+        reply_markup=ReplyKeyboardMarkup([["✅ Accept", "✏️ Edit"]], one_time_keyboard=True, resize_keyboard=True),
     )
     ctx.user_data["pending_ai"]      = ai
     ctx.user_data["pending_problem"] = problem
@@ -335,14 +353,12 @@ async def got_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     if "Edit" in choice:
         await update.message.reply_text(
-            "✏️ Type the corrected *French caption* (one line):",
-            parse_mode="Markdown",
+            "✏️ Type the corrected *French caption*:", parse_mode="Markdown",
             reply_markup=ReplyKeyboardRemove(),
         )
         ctx.user_data["editing"] = "caption_fr"
         return STATE_CONFIRM_CAPTION
 
-    # Check if we're in edit mode
     editing = ctx.user_data.pop("editing", None)
     if editing == "caption_fr":
         ctx.user_data["pending_ai"]["caption_fr"] = choice
@@ -351,9 +367,7 @@ async def got_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return STATE_CONFIRM_CAPTION
     if editing == "caption_en":
         ctx.user_data["pending_ai"]["caption_en"] = choice
-        # fall through to save
 
-    # Save photo
     session["photos"].append({
         "path":         ctx.user_data["current_photo_path"],
         "element_type": ctx.user_data.get("element_type"),
@@ -365,10 +379,8 @@ async def got_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     count = len(session["photos"])
 
     await update.message.reply_text(
-        f"✅ Photo {count} saved!\n\n"
-        "📸 Send the next photo, or type */done* to generate reports.",
-        parse_mode="Markdown",
-        reply_markup=ReplyKeyboardRemove(),
+        f"✅ Photo {count} saved!\n\n📸 Send the next photo, or type */done* to generate reports.",
+        parse_mode="Markdown", reply_markup=ReplyKeyboardRemove(),
     )
     return STATE_PHOTO
 
@@ -383,8 +395,7 @@ async def cmd_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return STATE_PHOTO
 
     await update.message.reply_text(
-        f"📝 Building reports for *{session.get('project_name')}*…\n"
-        f"{len(photos)} photo(s) — please wait…",
+        f"📝 Building reports for *{session.get('project_name')}*…\n{len(photos)} photo(s) — please wait…",
         parse_mode="Markdown",
     )
 
@@ -416,16 +427,10 @@ async def cmd_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     count = len(session.get("photos", []))
     await update.message.reply_text(
-        f"📊 *Status*\n"
-        f"Project : {session.get('project_name','—')}\n"
-        f"Address : {session.get('address','—')}\n"
-        f"Photos  : {count}\n\n"
-        "Send more photos or type /done.",
+        f"📊 *Status*\nProject : {session.get('project_name','—')}\nAddress : {session.get('address','—')}\nPhotos  : {count}\n\nSend more photos or type /done.",
         parse_mode="Markdown",
     )
 
-
-# ── Main ───────────────────────────────────────────────────────────────────
 
 def main():
     app  = Application.builder().token(TELEGRAM_TOKEN).build()
