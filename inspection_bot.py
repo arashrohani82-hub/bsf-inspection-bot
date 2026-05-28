@@ -54,10 +54,10 @@ SEVERITY_MAP = {
     "ok":       "✅ OK / Acceptable",
 }
 
-SESSIONS_DIR  = Path("/home/claude/sessions");  SESSIONS_DIR.mkdir(exist_ok=True)
-PHOTOS_DIR    = Path("/home/claude/photos");    PHOTOS_DIR.mkdir(exist_ok=True)
-REPORTS_DIR   = Path("/home/claude/reports");   REPORTS_DIR.mkdir(exist_ok=True)
-TEMPLATE_PATH = Path("/home/claude/Template.docx")
+SESSIONS_DIR  = Path("/app/sessions");  SESSIONS_DIR.mkdir(exist_ok=True)
+PHOTOS_DIR    = Path("/app/photos");    PHOTOS_DIR.mkdir(exist_ok=True)
+REPORTS_DIR   = Path("/app/reports");   REPORTS_DIR.mkdir(exist_ok=True)
+TEMPLATE_PATH = Path("/app/Template.docx")
 
 
 # ── Session helpers ────────────────────────────────────────────────────────
