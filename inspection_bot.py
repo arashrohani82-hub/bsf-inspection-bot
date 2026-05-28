@@ -166,21 +166,21 @@ def insert_photos_vertical(doc, anchor_elem, photos, lang, img_width=5.5):
 
 # ── Add label to image ─────────────────────────────────────────────────────
 def add_label_to_image(img_path, label, output_path, display_width_px=800):
-    """Add a white box with label text (e.g. '1a') to top-left corner.
-    Label size is based on display_width_px (the rendered size in Word),
-    not the original image resolution."""
+    """Resize image to standard width, add large label, save."""
     from PIL import Image, ImageDraw, ImageFont
-    img  = Image.open(img_path).convert("RGB")
-    # Scale factor: ratio of original to display size
-    scale = img.width / display_width_px
-    # Font size = 1/8 of display width, scaled back to original resolution
-    font_size = max(40, int(display_width_px / 2 * scale))
+    img = Image.open(img_path).convert("RGB")
+    # Resize to standard display width (preserving aspect ratio)
+    ratio = display_width_px / img.width
+    new_h = int(img.height * ratio)
+    img = img.resize((display_width_px, new_h), Image.LANCZOS)
     draw = ImageDraw.Draw(img)
+    # Label = 1/5 of display width — always large and clear
+    font_size = display_width_px // 5
     try:
         font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
     except:
         font = ImageFont.load_default()
-    pad  = font_size // 3
+    pad  = font_size // 4
     bbox = draw.textbbox((0, 0), label, font=font)
     w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
     draw.rectangle([0, 0, w + pad*2, h + pad*2], fill="white")
