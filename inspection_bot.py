@@ -166,16 +166,18 @@ def insert_photos_vertical(doc, anchor_elem, photos, lang, img_width=5.5):
 
 # ── Add label to image ─────────────────────────────────────────────────────
 def add_label_to_image(img_path, label, output_path):
-    """Add a white box with label text (e.g. '1a') to top-left corner."""
+    """Add a white box with label text (e.g. '1a') to top-left corner.
+    Font size is relative to image width so it's always visible."""
     from PIL import Image, ImageDraw, ImageFont
-    import io
     img  = Image.open(img_path).convert("RGB")
     draw = ImageDraw.Draw(img)
+    # Scale font to ~1/12 of image width (visible on any resolution)
+    font_size = max(60, img.width // 12)
     try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
     except:
         font = ImageFont.load_default()
-    pad  = 10
+    pad  = font_size // 3
     bbox = draw.textbbox((0, 0), label, font=font)
     w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
     draw.rectangle([0, 0, w + pad*2, h + pad*2], fill="white")
