@@ -165,14 +165,17 @@ def insert_photos_vertical(doc, anchor_elem, photos, lang, img_width=5.5):
 
 
 # ── Add label to image ─────────────────────────────────────────────────────
-def add_label_to_image(img_path, label, output_path):
+def add_label_to_image(img_path, label, output_path, display_width_px=800):
     """Add a white box with label text (e.g. '1a') to top-left corner.
-    Font size is relative to image width so it's always visible."""
+    Label size is based on display_width_px (the rendered size in Word),
+    not the original image resolution."""
     from PIL import Image, ImageDraw, ImageFont
     img  = Image.open(img_path).convert("RGB")
+    # Scale factor: ratio of original to display size
+    scale = img.width / display_width_px
+    # Font size = 1/8 of display width, scaled back to original resolution
+    font_size = max(40, int(display_width_px / 2 * scale))
     draw = ImageDraw.Draw(img)
-    # Scale font to ~1/12 of image width (visible on any resolution)
-    font_size = max(120, img.width // 8)
     try:
         font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
     except:
