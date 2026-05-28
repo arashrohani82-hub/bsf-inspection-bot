@@ -15,9 +15,7 @@ from telegram.ext import (
 )
 from docx import Document
 from docx.shared import Inches, Pt
-from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
-import copy
 
 logging.basicConfig(format="%(asctime)s | %(levelname)s | %(message)s", level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -70,6 +68,32 @@ def clear_session(chat_id):
     if p.exists(): p.unlink()
 
 
+# ── Replace placeholders (handles split runs) ──────────────────────────────
+def replace_in_paragraph(para, replacements):
+    full_text = para.text
+    new_text  = full_text
+    for key, val in replacements.items():
+        new_text = new_text.replace(key, val)
+    if new_text == full_text:
+        return
+    if para.runs:
+        # Preserve formatting of first run, put all text there
+        para.runs[0].text = new_text
+        for run in para.runs[1:]:
+            run.text = ""
+    else:
+        para.add_run(new_text)
+
+def apply_replacements(doc, replacements):
+    for para in doc.paragraphs:
+        replace_in_paragraph(para, replacements)
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    replace_in_paragraph(para, replacements)
+
+
 # ── Claude Vision ──────────────────────────────────────────────────────────
 def analyse_photo(image_bytes, element_type, location, problem):
     import base64
@@ -115,25 +139,6 @@ Respond ONLY with valid JSON, no markdown, no preamble:
 
 
 # ── Report builder ─────────────────────────────────────────────────────────
-def add_paragraph_after(doc, ref_paragraph, text="", style=None):
-    """Insert a new paragraph after ref_paragraph and return it."""
-    new_para = OxmlElement("w:p")
-    ref_paragraph._element.addnext(new_para)
-    # Find the newly inserted paragraph object
-    for i, p in enumerate(doc.paragraphs):
-        if p._element is new_para:
-            if style:
-                p.style = style
-            if text:
-                p.add_run(text)
-            return p
-    # Fallback: just append
-    p = doc.add_paragraph(text)
-    if style:
-        p.style = style
-    return p
-
-
 def build_report(session, lang):
     doc     = Document(TEMPLATE_PATH)
     project = session.get("project_name", "—")
@@ -147,22 +152,12 @@ def build_report(session, lang):
         "{{Address_of_project}}":    address,
         "{{Date }}":                 date,
         "{{Date}}":                  date,
+        "{{Plans}}":                 "",
+        "{{caption}}":               "",
+        "{{Detail_davit }}":         "",
     }
 
-    def replace_para(para):
-        for key, val in replacements.items():
-            if key in para.text:
-                for run in para.runs:
-                    if key in run.text:
-                        run.text = run.text.replace(key, val)
-
-    for para in doc.paragraphs:
-        replace_para(para)
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for para in cell.paragraphs:
-                    replace_para(para)
+    apply_replacements(doc, replacements)
 
     # Find {{Photos}} placeholder paragraph
     photos_para = None
@@ -172,16 +167,14 @@ def build_report(session, lang):
             break
 
     if photos_para is None:
-        # Append at end if placeholder not found
         photos_para = doc.add_paragraph()
 
     # Clear placeholder text
     for run in photos_para.runs:
         run.text = ""
 
-    # Insert photos in reverse order (each addnext goes after the anchor)
-    for idx, photo in enumerate(reversed(photos), start=1):
-        real_idx  = len(photos) - idx + 1
+    # Insert photos — each set goes right after the anchor paragraph
+    for photo in reversed(photos):
         caption_k = "caption_fr" if lang == "fr" else "caption_en"
         detail_k  = "detail_fr"  if lang == "fr" else "detail_en"
         ai        = photo.get("ai", {})
@@ -189,31 +182,30 @@ def build_report(session, lang):
         detail    = ai.get(detail_k, "")
         severity  = SEVERITY_MAP.get(ai.get("severity", "ok"), "")
 
-        # 3. Severity line
-        sev_p = OxmlElement("w:p")
-        photos_para._element.addnext(sev_p)
-        # find it and add text
+        # Insert severity paragraph (innermost → goes last visually)
+        sev_elem = OxmlElement("w:p")
+        photos_para._element.addnext(sev_elem)
         for p in doc.paragraphs:
-            if p._element is sev_p:
+            if p._element is sev_elem:
                 r = p.add_run(f"Severity: {severity}   |   {detail}")
                 r.font.size = Pt(9)
                 break
 
-        # 2. Caption line
-        cap_p = OxmlElement("w:p")
-        photos_para._element.addnext(cap_p)
+        # Insert caption paragraph
+        cap_elem = OxmlElement("w:p")
+        photos_para._element.addnext(cap_elem)
         for p in doc.paragraphs:
-            if p._element is cap_p:
-                r = p.add_run(f"Fig. {real_idx} – {caption}")
+            if p._element is cap_elem:
+                r = p.add_run(f"Fig. – {caption}")
                 r.italic = True
                 r.font.size = Pt(10)
                 break
 
-        # 1. Image
-        img_p = OxmlElement("w:p")
-        photos_para._element.addnext(img_p)
+        # Insert image paragraph
+        img_elem = OxmlElement("w:p")
+        photos_para._element.addnext(img_elem)
         for p in doc.paragraphs:
-            if p._element is img_p:
+            if p._element is img_elem:
                 img_path = photo.get("path")
                 if img_path and Path(img_path).exists():
                     try:
@@ -240,9 +232,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     clear_session(chat_id)
     save_session(chat_id, {"photos": [], "date": datetime.today().strftime("%Y-%m-%d")})
     await update.message.reply_text(
-        "👷 *BSF Inspections – Report Bot*\n\n"
-        "Welcome! Let's start a new inspection.\n\n"
-        "What is the *project name*?",
+        "👷 *BSF Inspections – Report Bot*\n\nWelcome! Let's start a new inspection.\n\nWhat is the *project name*?",
         parse_mode="Markdown",
     )
     return STATE_PROJECT_NAME
@@ -285,10 +275,8 @@ async def got_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def got_element_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     ctx.user_data["element_type"] = update.message.text.strip()
     await update.message.reply_text(
-        "📌 Where exactly in the structure?\n\n"
-        "_e.g. Roof NE corner · Anchor #5 · Level 12 · South facade…_",
-        parse_mode="Markdown",
-        reply_markup=ReplyKeyboardRemove(),
+        "📌 Where exactly in the structure?\n\n_e.g. Roof NE corner · Anchor #5 · Level 12_",
+        parse_mode="Markdown", reply_markup=ReplyKeyboardRemove(),
     )
     return STATE_LOCATION
 
@@ -305,30 +293,18 @@ async def got_location(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def got_problem(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     problem = update.message.text.strip()
-    if problem.lower() == "skip":
-        problem = ""
+    if problem.lower() == "skip": problem = ""
 
     await update.message.reply_text("🤖 Analysing photo with AI…")
 
     try:
         img_bytes = Path(ctx.user_data["current_photo_path"]).read_bytes()
-        ai = analyse_photo(
-            img_bytes,
-            ctx.user_data.get("element_type", "Unknown"),
-            ctx.user_data.get("location", "Unknown"),
-            problem,
-        )
+        ai = analyse_photo(img_bytes, ctx.user_data.get("element_type","Unknown"), ctx.user_data.get("location","Unknown"), problem)
     except Exception as e:
         log.error(f"Claude API error: {e}")
-        ai = {
-            "caption_fr": "Observation à compléter",
-            "caption_en": "Observation to be completed",
-            "severity":   "minor",
-            "detail_fr":  "Détail à préciser.",
-            "detail_en":  "Detail to be specified.",
-        }
+        ai = {"caption_fr":"Observation à compléter","caption_en":"Observation to be completed","severity":"minor","detail_fr":"Détail à préciser.","detail_en":"Detail to be specified."}
 
-    sev = SEVERITY_MAP.get(ai.get("severity", "ok"), "")
+    sev = SEVERITY_MAP.get(ai.get("severity","ok"),"")
     msg = (
         f"*Caption (FR):* {ai.get('caption_fr')}\n"
         f"*Caption (EN):* {ai.get('caption_en')}\n"
@@ -337,10 +313,8 @@ async def got_problem(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         f"*Detail (EN):* {ai.get('detail_en')}\n\n"
         "Do you accept this caption?"
     )
-    await update.message.reply_text(
-        msg, parse_mode="Markdown",
-        reply_markup=ReplyKeyboardMarkup([["✅ Accept", "✏️ Edit"]], one_time_keyboard=True, resize_keyboard=True),
-    )
+    await update.message.reply_text(msg, parse_mode="Markdown",
+        reply_markup=ReplyKeyboardMarkup([["✅ Accept","✏️ Edit"]], one_time_keyboard=True, resize_keyboard=True))
     ctx.user_data["pending_ai"]      = ai
     ctx.user_data["pending_problem"] = problem
     return STATE_CONFIRM_CAPTION
@@ -352,10 +326,7 @@ async def got_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     choice  = update.message.text.strip()
 
     if "Edit" in choice:
-        await update.message.reply_text(
-            "✏️ Type the corrected *French caption*:", parse_mode="Markdown",
-            reply_markup=ReplyKeyboardRemove(),
-        )
+        await update.message.reply_text("✏️ Type the corrected *French caption*:", parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
         ctx.user_data["editing"] = "caption_fr"
         return STATE_CONFIRM_CAPTION
 
@@ -369,19 +340,17 @@ async def got_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ctx.user_data["pending_ai"]["caption_en"] = choice
 
     session["photos"].append({
-        "path":         ctx.user_data["current_photo_path"],
+        "path": ctx.user_data["current_photo_path"],
         "element_type": ctx.user_data.get("element_type"),
-        "location":     ctx.user_data.get("location"),
-        "problem":      ctx.user_data.get("pending_problem"),
-        "ai":           ctx.user_data.get("pending_ai"),
+        "location": ctx.user_data.get("location"),
+        "problem": ctx.user_data.get("pending_problem"),
+        "ai": ctx.user_data.get("pending_ai"),
     })
     save_session(chat_id, session)
     count = len(session["photos"])
-
     await update.message.reply_text(
         f"✅ Photo {count} saved!\n\n📸 Send the next photo, or type */done* to generate reports.",
-        parse_mode="Markdown", reply_markup=ReplyKeyboardRemove(),
-    )
+        parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
     return STATE_PHOTO
 
 
@@ -389,16 +358,12 @@ async def cmd_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     session = load_session(chat_id)
     photos  = session.get("photos", [])
-
     if not photos:
         await update.message.reply_text("⚠️ No photos yet. Send at least one photo first.")
         return STATE_PHOTO
-
     await update.message.reply_text(
         f"📝 Building reports for *{session.get('project_name')}*…\n{len(photos)} photo(s) — please wait…",
-        parse_mode="Markdown",
-    )
-
+        parse_mode="Markdown")
     try:
         report_fr = build_report(session, "fr")
         report_en = build_report(session, "en")
@@ -408,14 +373,13 @@ async def cmd_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         log.error(f"Report error: {e}")
         await update.message.reply_text(f"❌ Error: {e}")
-
     clear_session(chat_id)
     return ConversationHandler.END
 
 
 async def cmd_cancel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     clear_session(update.effective_chat.id)
-    await update.message.reply_text("❌ Inspection cancelled. Type /start to begin again.", reply_markup=ReplyKeyboardRemove())
+    await update.message.reply_text("❌ Cancelled. Type /start to begin again.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
 
@@ -425,11 +389,10 @@ async def cmd_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not session:
         await update.message.reply_text("No active inspection. Type /start.")
         return
-    count = len(session.get("photos", []))
+    count = len(session.get("photos",[]))
     await update.message.reply_text(
         f"📊 *Status*\nProject : {session.get('project_name','—')}\nAddress : {session.get('address','—')}\nPhotos  : {count}\n\nSend more photos or type /done.",
-        parse_mode="Markdown",
-    )
+        parse_mode="Markdown")
 
 
 def main():
