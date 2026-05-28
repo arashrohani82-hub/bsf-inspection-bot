@@ -172,7 +172,7 @@ def add_label_to_image(img_path, label, output_path):
     img  = Image.open(img_path).convert("RGB")
     draw = ImageDraw.Draw(img)
     # Scale font to ~1/12 of image width (visible on any resolution)
-    font_size = max(60, img.width // 12)
+    font_size = max(120, img.width // 8)
     try:
         font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
     except:
