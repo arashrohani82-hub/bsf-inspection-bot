@@ -128,6 +128,51 @@ def insert_single_image(doc, anchor_para, img_path, width_inches=4.5, caption_fr
             break
 
 
+
+# ── Photos vertical (one per row, full width) ──────────────────────────────
+def insert_photos_vertical(doc, anchor_elem, photos, lang, img_width=5.5):
+    caption_k = "caption_fr" if lang == "fr" else "caption_en"
+    insert_after = anchor_elem
+    fig_num = 1
+
+    for photo in photos:
+        ai       = photo.get("ai", {})
+        caption  = ai.get(caption_k, f"Plan {fig_num}")
+        img_path = photo.get("path")
+
+        # Image paragraph
+        img_elem = OxmlElement("w:p")
+        insert_after.addnext(img_elem)
+        for p in doc.paragraphs:
+            if p._element is img_elem:
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                if img_path and Path(img_path).exists():
+                    try:
+                        p.add_run().add_picture(img_path, width=Inches(img_width))
+                    except:
+                        p.add_run("[image error]")
+                break
+        insert_after = img_elem
+
+        # Caption paragraph
+        cap_elem = OxmlElement("w:p")
+        insert_after.addnext(cap_elem)
+        for p in doc.paragraphs:
+            if p._element is cap_elem:
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                r = p.add_run(f"Fig. {fig_num} – {caption}")
+                r.italic = True
+                r.font.size = Pt(9)
+                break
+        insert_after = cap_elem
+
+        # Spacer
+        spacer = OxmlElement("w:p")
+        insert_after.addnext(spacer)
+        insert_after = spacer
+
+        fig_num += 1
+
 # ── Photo grid (2 columns, 4 per page) ────────────────────────────────────
 def insert_photo_grid(doc, anchor_elem, photos, lang, img_width=2.7):
     caption_k = "caption_fr" if lang == "fr" else "caption_en"
@@ -283,7 +328,7 @@ def build_report(session, lang):
             for run in para.runs:
                 run.text = ""
             if plans:
-                insert_photo_grid(doc, para._element, plans, lang, img_width=4.5)
+                insert_photos_vertical(doc, para._element, plans, lang, img_width=5.5)
             break
 
     # ── {{Detail_davit}} ───────────────────────────────────────────────────
