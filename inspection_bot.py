@@ -30,12 +30,14 @@ anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
 (
     STATE_PROJECT_NAME,
     STATE_ADDRESS,
+    STATE_PLANS,
+    STATE_DAVIT_DETAIL,
     STATE_PHOTO,
     STATE_ELEMENT_TYPE,
     STATE_LOCATION,
     STATE_PROBLEM,
     STATE_CONFIRM_CAPTION,
-) = range(7)
+) = range(9)
 
 ELEMENT_TYPES = [
     ["Anchor", "Davit"],
@@ -96,15 +98,45 @@ def apply_replacements(doc, replacements):
                     replace_in_paragraph(para, replacements)
 
 
+# ── Insert single image at a paragraph ────────────────────────────────────
+def insert_single_image(doc, anchor_para, img_path, width_inches=4.5, caption_fr="", caption_en="", lang="fr"):
+    caption = caption_fr if lang == "fr" else caption_en
+    insert_after = anchor_para._element
+
+    # Caption paragraph
+    cap_elem = OxmlElement("w:p")
+    insert_after.addnext(cap_elem)
+    for p in doc.paragraphs:
+        if p._element is cap_elem:
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            r = p.add_run(caption)
+            r.italic = True
+            r.font.size = Pt(9)
+            break
+
+    # Image paragraph (inserted before caption via addnext on anchor)
+    img_elem = OxmlElement("w:p")
+    insert_after.addnext(img_elem)
+    for p in doc.paragraphs:
+        if p._element is img_elem:
+            p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            if img_path and Path(img_path).exists():
+                try:
+                    p.add_run().add_picture(img_path, width=Inches(width_inches))
+                except Exception as e:
+                    p.add_run(f"[image error: {e}]")
+            break
+
+
 # ── Photo grid (2 columns, 4 per page) ────────────────────────────────────
-def add_photo_grid(doc, photos_para, photos, lang):
+def insert_photo_grid(doc, anchor_elem, photos, lang, img_width=2.7):
     caption_k = "caption_fr" if lang == "fr" else "caption_en"
     detail_k  = "detail_fr"  if lang == "fr" else "detail_en"
 
     chunks = [photos[i:i+4] for i in range(0, len(photos), 4)]
-    insert_after = photos_para._element
-
+    insert_after = anchor_elem
     fig_num = 1
+
     for chunk_idx, chunk in enumerate(chunks):
         if len(chunk) % 2 != 0:
             chunk = chunk + [None]
@@ -113,7 +145,6 @@ def add_photo_grid(doc, photos_para, photos, lang):
         for left_photo, right_photo in pairs:
             tbl = doc.add_table(rows=1, cols=2)
 
-            # Remove all borders
             tblPr = tbl._tbl.tblPr
             if tblPr is None:
                 tblPr = OxmlElement("w:tblPr")
@@ -124,8 +155,6 @@ def add_photo_grid(doc, photos_para, photos, lang):
                 b.set(qn("w:val"), "none")
                 tblBorders.append(b)
             tblPr.append(tblBorders)
-
-            # Table width
             tblW = OxmlElement("w:tblW")
             tblW.set(qn("w:w"), "9360")
             tblW.set(qn("w:type"), "dxa")
@@ -145,9 +174,9 @@ def add_photo_grid(doc, photos_para, photos, lang):
                 run = img_para.add_run()
                 if img_path and Path(img_path).exists():
                     try:
-                        run.add_picture(img_path, width=Inches(2.7))
-                    except Exception as e:
-                        run.text = f"[image error]"
+                        run.add_picture(img_path, width=Inches(img_width))
+                    except:
+                        run.text = "[image error]"
 
                 cap_p = cell.add_paragraph()
                 cap_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -164,18 +193,15 @@ def add_photo_grid(doc, photos_para, photos, lang):
             fill_cell(tbl.rows[0].cells[1], right_photo, fig_num + 1)
             fig_num += 2
 
-            # Move table to correct position
             tbl_el = tbl._tbl
             doc._body._body.remove(tbl_el)
             insert_after.addnext(tbl_el)
             insert_after = tbl_el
 
-            # Spacer paragraph between rows
             spacer = OxmlElement("w:p")
             insert_after.addnext(spacer)
             insert_after = spacer
 
-        # Page break between groups of 4
         if chunk_idx < len(chunks) - 1:
             pb_p  = OxmlElement("w:p")
             pb_r  = OxmlElement("w:r")
@@ -233,11 +259,13 @@ Respond ONLY with valid JSON, no markdown, no preamble:
 
 # ── Report builder ─────────────────────────────────────────────────────────
 def build_report(session, lang):
-    doc     = Document(TEMPLATE_PATH)
-    project = session.get("project_name", "—")
-    address = session.get("address", "—")
-    date    = session.get("date", datetime.today().strftime("%Y-%m-%d"))
-    photos  = session.get("photos", [])
+    doc          = Document(TEMPLATE_PATH)
+    project      = session.get("project_name", "—")
+    address      = session.get("address", "—")
+    date         = session.get("date", datetime.today().strftime("%Y-%m-%d"))
+    photos       = session.get("photos", [])
+    plans        = session.get("plans", [])
+    davit_detail = session.get("davit_detail")
 
     replacements = {
         "{{Project_Name}}":          project,
@@ -245,12 +273,32 @@ def build_report(session, lang):
         "{{Address_of_project}}":    address,
         "{{Date }}":                 date,
         "{{Date}}":                  date,
-        "{{Plans}}":                 "",
         "{{caption}}":               "",
-        "{{Detail_davit }}":         "",
     }
     apply_replacements(doc, replacements)
 
+    # ── {{Plans}} ──────────────────────────────────────────────────────────
+    for para in doc.paragraphs:
+        if "{{Plans}}" in para.text:
+            for run in para.runs:
+                run.text = ""
+            if plans:
+                insert_photo_grid(doc, para._element, plans, lang, img_width=4.5)
+            break
+
+    # ── {{Detail_davit}} ───────────────────────────────────────────────────
+    for para in doc.paragraphs:
+        if "{{Detail_davit" in para.text:
+            for run in para.runs:
+                run.text = ""
+            if davit_detail:
+                cap_fr = "Fig. 2 : Détail de configuration des bossoirs"
+                cap_en = "Fig. 2 : Davit configuration detail"
+                insert_single_image(doc, para, davit_detail, width_inches=4.5,
+                                    caption_fr=cap_fr, caption_en=cap_en, lang=lang)
+            break
+
+    # ── {{Photos}} ─────────────────────────────────────────────────────────
     photos_para = None
     for para in doc.paragraphs:
         if "{{Photos" in para.text:
@@ -260,9 +308,8 @@ def build_report(session, lang):
         photos_para = doc.add_paragraph()
     for run in photos_para.runs:
         run.text = ""
-
     if photos:
-        add_photo_grid(doc, photos_para, photos, lang)
+        insert_photo_grid(doc, photos_para._element, photos, lang, img_width=2.7)
 
     suffix = "FR" if lang == "fr" else "EN"
     fname  = f"{project.replace(' ','_')}_{date}_{suffix}.docx"
@@ -278,7 +325,8 @@ def build_report(session, lang):
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     clear_session(chat_id)
-    save_session(chat_id, {"photos": [], "date": datetime.today().strftime("%Y-%m-%d")})
+    save_session(chat_id, {"photos": [], "plans": [], "davit_detail": None,
+                           "date": datetime.today().strftime("%Y-%m-%d")})
     await update.message.reply_text(
         "👷 *BSF Inspections – Report Bot*\n\nWelcome! Let's start a new inspection.\n\nWhat is the *project name*?",
         parse_mode="Markdown")
@@ -297,8 +345,59 @@ async def got_address(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     session = load_session(chat_id)
     session["address"] = update.message.text.strip()
     save_session(chat_id, session)
-    await update.message.reply_text("✅ Project info saved!\n\n📸 Send the *first photo*.", parse_mode="Markdown")
+    await update.message.reply_text(
+        "🗺 Do you have *floor plans* to attach?\n\nSend photos of the plans, or type *skip*.",
+        parse_mode="Markdown")
+    return STATE_PLANS
+
+async def got_plan_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    chat_id    = update.effective_chat.id
+    session    = load_session(chat_id)
+    photo_file = await update.message.photo[-1].get_file()
+    plan_idx   = len(session.get("plans", [])) + 1
+    plan_path  = str(PHOTOS_DIR / f"{chat_id}_plan_{plan_idx}.jpg")
+    await photo_file.download_to_drive(plan_path)
+    session.setdefault("plans", []).append({"path": plan_path, "ai": {
+        "caption_fr": f"Plan {plan_idx}", "caption_en": f"Plan {plan_idx}",
+        "severity": "ok", "detail_fr": "", "detail_en": "",
+    }})
+    save_session(chat_id, session)
+    count = len(session["plans"])
+    await update.message.reply_text(
+        f"✅ Plan {count} saved!\n\nSend another plan, or type *skip* to continue.",
+        parse_mode="Markdown")
+    return STATE_PLANS
+
+async def got_plan_skip(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if update.message.text.strip().lower() == "skip":
+        await update.message.reply_text(
+            "🔩 Do you have a *davit detail drawing*?\n\nSend a photo of the davit detail, or type *skip*.",
+            parse_mode="Markdown")
+        return STATE_DAVIT_DETAIL
+    await update.message.reply_text("Send a plan photo, or type *skip* to continue.", parse_mode="Markdown")
+    return STATE_PLANS
+
+async def got_davit_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    chat_id    = update.effective_chat.id
+    session    = load_session(chat_id)
+    photo_file = await update.message.photo[-1].get_file()
+    davit_path = str(PHOTOS_DIR / f"{chat_id}_davit_detail.jpg")
+    await photo_file.download_to_drive(davit_path)
+    session["davit_detail"] = davit_path
+    save_session(chat_id, session)
+    await update.message.reply_text(
+        "✅ Davit detail saved!\n\n📸 Now send the *first inspection photo*.",
+        parse_mode="Markdown")
     return STATE_PHOTO
+
+async def got_davit_skip(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if update.message.text.strip().lower() == "skip":
+        await update.message.reply_text(
+            "✅ No davit detail attached.\n\n📸 Now send the *first inspection photo*.",
+            parse_mode="Markdown")
+        return STATE_PHOTO
+    await update.message.reply_text("Send a davit detail photo, or type *skip* to continue.", parse_mode="Markdown")
+    return STATE_DAVIT_DETAIL
 
 async def got_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id    = update.effective_chat.id
@@ -335,10 +434,12 @@ async def got_problem(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("🤖 Analysing photo with AI…")
     try:
         img_bytes = Path(ctx.user_data["current_photo_path"]).read_bytes()
-        ai = analyse_photo(img_bytes, ctx.user_data.get("element_type","Unknown"), ctx.user_data.get("location","Unknown"), problem)
+        ai = analyse_photo(img_bytes, ctx.user_data.get("element_type","Unknown"),
+                           ctx.user_data.get("location","Unknown"), problem)
     except Exception as e:
         log.error(f"Claude API error: {e}")
-        ai = {"caption_fr":"Observation à compléter","caption_en":"Observation to be completed","severity":"minor","detail_fr":"Détail à préciser.","detail_en":"Detail to be specified."}
+        ai = {"caption_fr":"Observation à compléter","caption_en":"Observation to be completed",
+              "severity":"minor","detail_fr":"Détail à préciser.","detail_en":"Detail to be specified."}
     sev = SEVERITY_MAP.get(ai.get("severity","ok"),"")
     msg = (
         f"*Caption (FR):* {ai.get('caption_fr')}\n"
@@ -359,7 +460,8 @@ async def got_confirm(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     session = load_session(chat_id)
     choice  = update.message.text.strip()
     if "Edit" in choice:
-        await update.message.reply_text("✏️ Type the corrected *French caption*:", parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text("✏️ Type the corrected *French caption*:",
+                                        parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
         ctx.user_data["editing"] = "caption_fr"
         return STATE_CONFIRM_CAPTION
     editing = ctx.user_data.pop("editing", None)
@@ -417,9 +519,14 @@ async def cmd_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not session:
         await update.message.reply_text("No active inspection. Type /start.")
         return
-    count = len(session.get("photos",[]))
     await update.message.reply_text(
-        f"📊 *Status*\nProject : {session.get('project_name','—')}\nAddress : {session.get('address','—')}\nPhotos  : {count}\n\nSend more photos or type /done.",
+        f"📊 *Status*\n"
+        f"Project      : {session.get('project_name','—')}\n"
+        f"Address      : {session.get('address','—')}\n"
+        f"Plans        : {len(session.get('plans',[]))}\n"
+        f"Davit detail : {'✅' if session.get('davit_detail') else '—'}\n"
+        f"Photos       : {len(session.get('photos',[]))}\n\n"
+        "Send more photos or type /done.",
         parse_mode="Markdown")
 
 def main():
@@ -429,7 +536,12 @@ def main():
         states={
             STATE_PROJECT_NAME:    [MessageHandler(filters.TEXT & ~filters.COMMAND, got_project_name)],
             STATE_ADDRESS:         [MessageHandler(filters.TEXT & ~filters.COMMAND, got_address)],
-            STATE_PHOTO:           [MessageHandler(filters.PHOTO, got_photo), CommandHandler("done", cmd_done)],
+            STATE_PLANS:           [MessageHandler(filters.PHOTO, got_plan_photo),
+                                    MessageHandler(filters.TEXT & ~filters.COMMAND, got_plan_skip)],
+            STATE_DAVIT_DETAIL:    [MessageHandler(filters.PHOTO, got_davit_photo),
+                                    MessageHandler(filters.TEXT & ~filters.COMMAND, got_davit_skip)],
+            STATE_PHOTO:           [MessageHandler(filters.PHOTO, got_photo),
+                                    CommandHandler("done", cmd_done)],
             STATE_ELEMENT_TYPE:    [MessageHandler(filters.TEXT & ~filters.COMMAND, got_element_type)],
             STATE_LOCATION:        [MessageHandler(filters.TEXT & ~filters.COMMAND, got_location)],
             STATE_PROBLEM:         [MessageHandler(filters.TEXT & ~filters.COMMAND, got_problem)],
