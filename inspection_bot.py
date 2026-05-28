@@ -163,6 +163,26 @@ def insert_photos_vertical(doc, anchor_elem, photos, lang, img_width=5.5):
         fig_num += 1
 
 
+
+# ── Add label to image ─────────────────────────────────────────────────────
+def add_label_to_image(img_path, label, output_path):
+    """Add a white box with label text (e.g. '1a') to top-left corner."""
+    from PIL import Image, ImageDraw, ImageFont
+    import io
+    img  = Image.open(img_path).convert("RGB")
+    draw = ImageDraw.Draw(img)
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 48)
+    except:
+        font = ImageFont.load_default()
+    pad  = 10
+    bbox = draw.textbbox((0, 0), label, font=font)
+    w, h = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    draw.rectangle([0, 0, w + pad*2, h + pad*2], fill="white")
+    draw.text((pad, pad), label, fill="black", font=font)
+    img.save(output_path, format="JPEG", quality=92)
+    return output_path
+
 # ── Insert photo groups ────────────────────────────────────────────────────
 def insert_photo_groups(doc, anchor_elem, groups, lang):
     """
@@ -202,7 +222,13 @@ def insert_photo_groups(doc, anchor_elem, groups, lang):
 
         pairs = [(photos_padded[i], photos_padded[i+1]) for i in range(0, len(photos_padded), 2)]
 
+        pair_idx = 0
         for left, right in pairs:
+            left_idx   = pair_idx * 2
+            right_idx  = pair_idx * 2 + 1
+            left_label  = f"{group_num}{letters[left_idx]}"  if left_idx  < len(letters) else ""
+            right_label = f"{group_num}{letters[right_idx]}" if right_idx < len(letters) else ""
+            pair_idx += 1
             tbl = doc.add_table(rows=1, cols=2)
 
             tblPr = tbl._tbl.tblPr
@@ -220,7 +246,7 @@ def insert_photo_groups(doc, anchor_elem, groups, lang):
             tblW.set(qn("w:type"), "dxa")
             tblPr.append(tblW)
 
-            def fill_cell(cell, photo):
+            def fill_cell(cell, photo, label=""):
                 if photo is None:
                     return
                 img_path = photo.get("path")
@@ -228,12 +254,14 @@ def insert_photo_groups(doc, anchor_elem, groups, lang):
                 img_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 if img_path and Path(img_path).exists():
                     try:
-                        img_para.add_run().add_picture(img_path, width=Inches(2.7))
+                        labeled_path = img_path.replace(".jpg", f"_{label}.jpg")
+                        add_label_to_image(img_path, label, labeled_path)
+                        img_para.add_run().add_picture(labeled_path, width=Inches(2.7))
                     except:
                         img_para.add_run("[image error]")
 
-            fill_cell(tbl.rows[0].cells[0], left)
-            fill_cell(tbl.rows[0].cells[1], right)
+            fill_cell(tbl.rows[0].cells[0], left,  left_label  if left  else "")
+            fill_cell(tbl.rows[0].cells[1], right, right_label if right else "")
 
             tbl_el = tbl._tbl
             doc._body._body.remove(tbl_el)
