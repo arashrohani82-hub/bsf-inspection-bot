@@ -329,20 +329,71 @@ Respond ONLY with valid JSON:
   "caption_en": "...",
   "severity": "critical|major|moderate|minor|ok"
 }}"""
-    response = anthropic_client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=300,
-        messages=[{
-            "role": "user",
-            "content": [
-                {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
-                {"type": "text", "text": prompt},
-            ],
-        }],
-    )
-    raw = response.content[0].text.strip().replace("```json","").replace("```","").strip()
-    return json.loads(raw)
+    for attempt in range(3):
+        try:
+            response = anthropic_client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=300,
+                timeout=60,
+                messages=[{
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}},
+                        {"type": "text", "text": prompt},
+                    ],
+                }],
+            )
+            raw = response.content[0].text.strip().replace("```json","").replace("```","").strip()
+            return json.loads(raw)
+        except Exception as e:
+            log.warning(f"API attempt {attempt+1} failed: {e}")
+            if attempt == 2:
+                raise
+            import time; time.sleep(3)
 
+
+
+# ── Remove a paragraph and surrounding empty paras ─────────────────────────
+def remove_paragraph(para):
+    p = para._element
+    p.getparent().remove(p)
+
+def clear_section_if_empty(doc, placeholder_text, also_remove_headers=None):
+    """When a section is skipped, remove its header lines and empty paras."""
+    target_para = None
+    for para in doc.paragraphs:
+        if placeholder_text in para.text:
+            target_para = para
+            break
+    if not target_para:
+        return
+    # Clear placeholder
+    for run in target_para.runs:
+        run.text = ""
+    # Remove surrounding empty paragraphs (up to 4 before and after)
+    idx = list(doc.paragraphs).index(target_para)
+    paras = doc.paragraphs
+    to_remove = []
+    # Remove empty paras after placeholder
+    for i in range(idx+1, min(len(paras), idx+6)):
+        if paras[i].text.strip() == "":
+            to_remove.append(paras[i])
+        else:
+            break
+    # Also remove the placeholder itself
+    to_remove.append(target_para)
+    # Optionally remove header lines before it
+    if also_remove_headers:
+        for i in range(idx-1, max(-1, idx-6), -1):
+            if any(h in paras[i].text for h in also_remove_headers) or paras[i].text.strip() == "":
+                to_remove.append(paras[i])
+            else:
+                break
+    for p in to_remove:
+        try:
+            remove_paragraph(p)
+        except:
+            pass
 
 # ── Report builder ─────────────────────────────────────────────────────────
 def build_report(session, lang):
@@ -363,20 +414,24 @@ def build_report(session, lang):
         "{{caption}}":               "",
     })
 
-    for para in doc.paragraphs:
-        if "{{Plans}}" in para.text:
-            for run in para.runs: run.text = ""
-            if plans:
+    if plans:
+        for para in doc.paragraphs:
+            if "{{Plans}}" in para.text:
+                for run in para.runs: run.text = ""
                 insert_photos_vertical(doc, para._element, plans, lang, img_width=5.5)
-            break
+                break
+    else:
+        clear_section_if_empty(doc, "{{Plans}}", also_remove_headers=["Plans disponibles", "Documents et références"])
 
-    for para in doc.paragraphs:
-        if "{{Detail_davit" in para.text:
-            for run in para.runs: run.text = ""
-            if davit_detail:
+    if davit_detail:
+        for para in doc.paragraphs:
+            if "{{Detail_davit" in para.text:
+                for run in para.runs: run.text = ""
                 cap = "Fig. 2 : Détail de configuration des bossoirs" if lang == "fr" else "Fig. 2 : Davit configuration detail"
                 insert_single_image(doc, para, davit_detail, width_inches=4.5, caption=cap)
-            break
+                break
+    else:
+        clear_section_if_empty(doc, "{{Detail_davit", also_remove_headers=["Fig. 1 : les plans", "Fig. 2 : Détail", "Rapports antérieurs"])
 
     photos_para = None
     for para in doc.paragraphs:
