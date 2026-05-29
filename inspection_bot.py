@@ -582,20 +582,34 @@ async def got_problem(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
               "caption_en": "Observation to be completed", "severity": "minor"}
 
     sev = SEVERITY_MAP.get(ai.get("severity","ok"),"")
+    ctx.user_data["pending_ai"] = ai
     await update.message.reply_text(
         f"*Suggested caption (FR):* {ai.get('caption_fr')}\n"
-        f"*Suggested caption (EN):* {ai.get('caption_en')}\n"
         f"*Severity:* {sev}\n\n"
-        "✏️ Type your *French caption* for this group\n_(or press Enter to accept the suggestion)_",
-        parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
-    ctx.user_data["pending_ai"] = ai
+        "Accept or type your own French caption:",
+        parse_mode="Markdown",
+        reply_markup=ReplyKeyboardMarkup(
+            [[f"✅ {ai.get('caption_fr')}"], ["✏️ Write my own"]],
+            one_time_keyboard=True, resize_keyboard=True))
     return STATE_GROUP_CAPTION_FR
 
 async def got_group_caption_fr(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     ai   = ctx.user_data.get("pending_ai", {})
-    ctx.user_data["final_caption_fr"] = text if text else ai.get("caption_fr", "")
-    await update.message.reply_text("✏️ Now type the *English caption* for this group:")
+    if text.startswith("✅ "):
+        # Accepted suggestion
+        ctx.user_data["final_caption_fr"] = ai.get("caption_fr", "")
+    elif text == "✏️ Write my own":
+        await update.message.reply_text("✏️ Type your *French caption*:", parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
+        return STATE_GROUP_CAPTION_FR
+    else:
+        ctx.user_data["final_caption_fr"] = text
+    await update.message.reply_text(
+        f"*Suggested caption (EN):* {ai.get('caption_en')}\n\nAccept or type your own English caption:",
+        parse_mode="Markdown",
+        reply_markup=ReplyKeyboardMarkup(
+            [[f"✅ {ai.get('caption_en')}"], ["✏️ Write my own"]],
+            one_time_keyboard=True, resize_keyboard=True))
     return STATE_GROUP_CAPTION_EN
 
 async def got_group_caption_en(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -603,7 +617,13 @@ async def got_group_caption_en(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     session = load_session(chat_id)
     text    = update.message.text.strip()
     ai      = ctx.user_data.get("pending_ai", {})
-    caption_en = text if text else ai.get("caption_en", "")
+    if text.startswith("✅ "):
+        caption_en = ai.get("caption_en", "")
+    elif text == "✏️ Write my own":
+        await update.message.reply_text("✏️ Type your *English caption*:", parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
+        return STATE_GROUP_CAPTION_EN
+    else:
+        caption_en = text
     caption_fr = ctx.user_data.get("final_caption_fr", "")
     severity   = ai.get("severity", "ok")
 
