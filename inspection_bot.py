@@ -353,46 +353,60 @@ Respond ONLY with valid JSON:
 
 
 
-# ── Remove a paragraph and surrounding empty paras ─────────────────────────
-def remove_paragraph(para):
-    p = para._element
-    p.getparent().remove(p)
-
+# ── Remove paragraphs safely by XML element ────────────────────────────────
 def clear_section_if_empty(doc, placeholder_text, also_remove_headers=None):
-    """When a section is skipped, remove its header lines and empty paras."""
-    target_para = None
+    """Find placeholder and remove it + surrounding empty paras using XML elements directly."""
+    # Collect all elements to remove (by XML element reference, not index)
+    body = doc._body._body
+
+    # Find the placeholder element
+    target_elem = None
     for para in doc.paragraphs:
         if placeholder_text in para.text:
-            target_para = para
+            target_elem = para._element
             break
-    if not target_para:
+    if target_elem is None:
         return
-    # Clear placeholder
-    for run in target_para.runs:
-        run.text = ""
-    # Remove surrounding empty paragraphs (up to 4 before and after)
-    idx = list(doc.paragraphs).index(target_para)
-    paras = doc.paragraphs
-    to_remove = []
-    # Remove empty paras after placeholder
-    for i in range(idx+1, min(len(paras), idx+6)):
-        if paras[i].text.strip() == "":
-            to_remove.append(paras[i])
-        else:
-            break
-    # Also remove the placeholder itself
-    to_remove.append(target_para)
-    # Optionally remove header lines before it
-    if also_remove_headers:
-        for i in range(idx-1, max(-1, idx-6), -1):
-            if any(h in paras[i].text for h in also_remove_headers) or paras[i].text.strip() == "":
-                to_remove.append(paras[i])
+
+    to_remove = [target_elem]
+
+    # Collect empty siblings after
+    nxt = target_elem.getnext()
+    count = 0
+    while nxt is not None and count < 5:
+        tag = nxt.tag.split("}")[-1] if "}" in nxt.tag else nxt.tag
+        if tag == "p":
+            text = "".join(t.text or "" for t in nxt.iter() if t.text)
+            if text.strip() == "":
+                to_remove.append(nxt)
+                nxt = nxt.getnext()
+                count += 1
             else:
                 break
-    for p in to_remove:
+        else:
+            break
+
+    # Collect header siblings before (if specified)
+    if also_remove_headers:
+        prev = target_elem.getprevious()
+        count = 0
+        while prev is not None and count < 6:
+            tag = prev.tag.split("}")[-1] if "}" in prev.tag else prev.tag
+            if tag == "p":
+                text = "".join(t.text or "" for t in prev.iter() if t.text)
+                if text.strip() == "" or any(h in text for h in also_remove_headers):
+                    to_remove.append(prev)
+                    prev = prev.getprevious()
+                    count += 1
+                else:
+                    break
+            else:
+                break
+
+    for elem in to_remove:
         try:
-            remove_paragraph(p)
-        except:
+            elem.getparent().remove(elem)
+        except Exception:
             pass
 
 # ── Report builder ─────────────────────────────────────────────────────────
