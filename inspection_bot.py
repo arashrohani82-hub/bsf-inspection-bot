@@ -3,7 +3,7 @@ BSF Inspections – Telegram Report Bot
 With project database and inspection type selection
 """
 
-import os, json, logging, subprocess
+import os, json, logging, subprocess, io, tempfile
 from datetime import datetime
 from pathlib import Path
 import anthropic
@@ -355,6 +355,60 @@ Respond ONLY with valid JSON:
             import time; time.sleep(3)
 
 
+
+# ── DOCX to PDF ────────────────────────────────────────────────────────────
+def docx_to_pdf(docx_path, pdf_path):
+    """Convert Word report to PDF using fpdf2 — no system dependencies."""
+    from fpdf import FPDF
+    import re
+
+    doc = Document(docx_path)
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.set_margins(20, 20, 20)
+
+    font_regular = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    font_bold    = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+
+    try:
+        pdf.add_font("DV",  "",  font_regular)
+        pdf.add_font("DV",  "B", font_bold)
+    except Exception:
+        pass
+
+    def clean(text):
+        # Remove emoji and non-latin chars that font can't handle
+        return re.sub(r'[^-À-ɏ’‘“”–—«»]', '', text)
+
+    pdf.add_page()
+    pdf.set_font("DV", size=10)
+
+    for para in doc.paragraphs:
+        text = clean(para.text.strip())
+        if not text:
+            pdf.ln(3)
+            continue
+        style = "B" if para.style.name.startswith("Heading") else ""
+        size  = 13 if "Heading 1" in para.style.name else (11 if "Heading" in para.style.name else 10)
+        pdf.set_font("DV", style=style, size=size)
+        pdf.multi_cell(0, 6, text)
+        pdf.ln(1)
+
+    # Add images
+    for rel in doc.part.rels.values():
+        if "image" in rel.reltype:
+            try:
+                img_data = rel.target_part.blob
+                img = Image.open(io.BytesIO(img_data)).convert("RGB")
+                with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+                    img.save(tmp.name, "JPEG", quality=85)
+                    pdf.add_page()
+                    pdf.image(tmp.name, x=20, w=min(170, img.width * 0.26))
+            except Exception:
+                pass
+
+    pdf.output(pdf_path)
+
 # ── Report builder ─────────────────────────────────────────────────────────
 def build_report(session, lang):
     doc          = Document(TEMPLATE_PATH)
@@ -633,12 +687,8 @@ async def cmd_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         report_fr = build_report(session, "fr")
         await update.message.reply_document(open(report_fr,"rb"), filename=report_fr.name, caption="🇫🇷 Rapport Word")
         try:
-            import mammoth, weasyprint
             pdf_out = report_fr.with_suffix(".pdf")
-            with open(report_fr, "rb") as f:
-                html_result = mammoth.convert_to_html(f)
-            html = "<html><head><meta charset='utf-8'><style>body{font-family:Arial,sans-serif;font-size:11pt;margin:2cm;} img{max-width:100%;} table{width:100%;border-collapse:collapse;}</style></head><body>" + html_result.value + "</body></html>"
-            weasyprint.HTML(string=html).write_pdf(str(pdf_out))
+            docx_to_pdf(str(report_fr), str(pdf_out))
             if pdf_out.exists():
                 await update.message.reply_document(open(pdf_out,"rb"), filename=pdf_out.name, caption="🇫🇷 Rapport PDF")
         except Exception as e:
