@@ -3,3 +3,5 @@ anthropic
 python-docx
 pillow
 requests
+mammoth
+weasyprint
