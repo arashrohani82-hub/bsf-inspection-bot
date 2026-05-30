@@ -26,6 +26,7 @@ ANTHROPIC_KEY    = os.environ["ANTHROPIC_API_KEY"]
 anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
 
 (
+    STATE_MAIN_MENU,
     STATE_INSPECTION_TYPE,
     STATE_PROJECT_SELECT,
     STATE_PLANS,
@@ -685,10 +686,13 @@ async def admin_save_project(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     db["projects"].append(ctx.user_data["new_project"])
     save_db(db)
     name = ctx.user_data["new_project"]["name"]
+    msg = "✅ Project *" + name + "* saved!\n\nWhat would you like to do next?"
     await update.message.reply_text(
-        f"✅ Project *{name}* saved!\n\nType /start to begin an inspection or /addproject to add another.",
-        parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
-    return ConversationHandler.END
+        msg, parse_mode="Markdown",
+        reply_markup=ReplyKeyboardMarkup(
+            [["📁 Define new project"], ["📝 Write a report"]],
+            one_time_keyboard=True, resize_keyboard=True))
+    return STATE_MAIN_MENU
 
 async def cmd_projects(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     projects = get_projects()
@@ -731,6 +735,13 @@ def main():
     conv = ConversationHandler(
         entry_points=[CommandHandler("start", cmd_start)],
         states={
+            STATE_MAIN_MENU:        [MessageHandler(filters.TEXT & ~filters.COMMAND, got_main_menu)],
+            STATE_ADMIN_PROJECT_NAME:    [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_got_name)],
+            STATE_ADMIN_PROJECT_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_got_address)],
+            STATE_ADMIN_PROJECT_PLANS:   [MessageHandler(filters.PHOTO, admin_got_plan),
+                                          MessageHandler(filters.TEXT & ~filters.COMMAND, admin_skip_plans)],
+            STATE_ADMIN_PROJECT_DAVIT:   [MessageHandler(filters.PHOTO, admin_got_davit),
+                                          MessageHandler(filters.TEXT & ~filters.COMMAND, admin_skip_davit)],
             STATE_INSPECTION_TYPE:  [MessageHandler(filters.TEXT & ~filters.COMMAND, got_inspection_type)],
             STATE_PROJECT_SELECT:   [MessageHandler(filters.TEXT & ~filters.COMMAND, got_project_select)],
             STATE_PHOTO:            [MessageHandler(filters.PHOTO, got_photo), CommandHandler("done", cmd_done)],
@@ -745,23 +756,7 @@ def main():
         allow_reentry=True,
     )
 
-    # Add project flow
-    add_proj_conv = ConversationHandler(
-        entry_points=[CommandHandler("addproject", cmd_addproject)],
-        states={
-            STATE_ADMIN_PROJECT_NAME:    [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_got_name)],
-            STATE_ADMIN_PROJECT_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_got_address)],
-            STATE_ADMIN_PROJECT_PLANS:   [MessageHandler(filters.PHOTO, admin_got_plan),
-                                          MessageHandler(filters.TEXT & ~filters.COMMAND, admin_skip_plans)],
-            STATE_ADMIN_PROJECT_DAVIT:   [MessageHandler(filters.PHOTO, admin_got_davit),
-                                          MessageHandler(filters.TEXT & ~filters.COMMAND, admin_skip_davit)],
-        },
-        fallbacks=[CommandHandler("cancel", cmd_cancel)],
-        allow_reentry=True,
-    )
-
     app.add_handler(conv)
-    app.add_handler(add_proj_conv)
     app.add_handler(CommandHandler("projects", cmd_projects))
     app.add_handler(CommandHandler("status", cmd_status))
 
