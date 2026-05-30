@@ -434,15 +434,13 @@ async def got_main_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     clear_session(chat_id)
-    save_session(chat_id, {"groups":[], "plans":[], "davit_detail":None,
-                           "date": datetime.today().strftime("%Y-%m-%d")})
-    types = get_inspection_types()
-    buttons = [[t["label_fr"]] for t in types]
     await update.message.reply_text(
-        "👷 *BSF Inspections – Report Bot*\n\nWhat type of inspection?",
+        "👷 *BSF Inspections – Report Bot*\n\nWhat would you like to do?",
         parse_mode="Markdown",
-        reply_markup=ReplyKeyboardMarkup(buttons, one_time_keyboard=True, resize_keyboard=True))
-    return STATE_INSPECTION_TYPE
+        reply_markup=ReplyKeyboardMarkup(
+            [["📁 Define new project"], ["📝 Write a report"]],
+            one_time_keyboard=True, resize_keyboard=True))
+    return STATE_MAIN_MENU
 
 async def got_inspection_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
