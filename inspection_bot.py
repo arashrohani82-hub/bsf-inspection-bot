@@ -633,10 +633,12 @@ async def cmd_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         report_fr = build_report(session, "fr")
         await update.message.reply_document(open(report_fr,"rb"), filename=report_fr.name, caption="🇫🇷 Rapport Word")
         try:
+            import mammoth, weasyprint
             pdf_out = report_fr.with_suffix(".pdf")
-            subprocess.run(["libreoffice","--headless","--convert-to","pdf",
-                           "--outdir", str(report_fr.parent), str(report_fr)],
-                           timeout=60, capture_output=True)
+            with open(report_fr, "rb") as f:
+                html_result = mammoth.convert_to_html(f)
+            html = "<html><head><meta charset='utf-8'><style>body{font-family:Arial,sans-serif;font-size:11pt;margin:2cm;} img{max-width:100%;} table{width:100%;border-collapse:collapse;}</style></head><body>" + html_result.value + "</body></html>"
+            weasyprint.HTML(string=html).write_pdf(str(pdf_out))
             if pdf_out.exists():
                 await update.message.reply_document(open(pdf_out,"rb"), filename=pdf_out.name, caption="🇫🇷 Rapport PDF")
         except Exception as e:
