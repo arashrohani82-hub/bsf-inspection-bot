@@ -66,16 +66,30 @@ PHOTOS_DIR    = BASE_DIR / "photos";    PHOTOS_DIR.mkdir(exist_ok=True)
 REPORTS_DIR   = BASE_DIR / "reports";   REPORTS_DIR.mkdir(exist_ok=True)
 TEMPLATE_PATH = BASE_DIR / "Template.docx"
 DB_PATH       = BASE_DIR / "projects.json"
+# Fallback: if not in /app, try same directory as this script
+if not DB_PATH.exists():
+    DB_PATH = Path(__file__).parent / "projects.json"
 
 
 # ── Database helpers ───────────────────────────────────────────────────────
 def load_db():
-    if DB_PATH.exists():
-        return json.loads(DB_PATH.read_text())
+    # Try /app/projects.json first, then same dir as script
+    paths = [BASE_DIR / "projects.json", Path(__file__).parent / "projects.json"]
+    for p in paths:
+        if p.exists():
+            return json.loads(p.read_text())
     return {"inspection_types": [], "projects": []}
 
 def save_db(db):
-    DB_PATH.write_text(json.dumps(db, ensure_ascii=False, indent=2))
+    # Always save to a writable location
+    for p in [BASE_DIR / "projects.json", Path(__file__).parent / "projects.json"]:
+        try:
+            p.write_text(json.dumps(db, ensure_ascii=False, indent=2))
+            return
+        except:
+            continue
+
+
 
 def get_projects():
     return load_db().get("projects", [])
