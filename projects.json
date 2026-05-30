@@ -1,0 +1,18 @@
+{
+  "inspection_types": [
+    {"id": "anchor_5y", "label_fr": "Ancrage 5 ans", "label_en": "5-Year Anchor Inspection"},
+    {"id": "anchor_1y", "label_fr": "Ancrage 1 an",  "label_en": "1-Year Anchor Inspection"},
+    {"id": "facade",    "label_fr": "Façade",         "label_en": "Facade Inspection"},
+    {"id": "parking",   "label_fr": "Stationnement",  "label_en": "Parking Inspection"},
+    {"id": "other",     "label_fr": "Autre",          "label_en": "Other"}
+  ],
+  "projects": [
+    {
+      "id": "proj_example",
+      "name": "Exemple — À remplacer",
+      "address": "123 rue Exemple, Montréal, QC H1A 1A1",
+      "plans": [],
+      "davit_detail": null
+    }
+  ]
+}
