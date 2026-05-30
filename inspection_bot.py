@@ -44,7 +44,7 @@ anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
     STATE_ADMIN_PROJECT_ADDRESS,
     STATE_ADMIN_PROJECT_PLANS,
     STATE_ADMIN_PROJECT_DAVIT,
-) = range(16)
+) = range(17)
 
 ELEMENT_TYPES = [
     ["Anchor", "Davit"],
