@@ -670,8 +670,11 @@ async def cmd_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             docx_to_pdf(str(report_fr), str(pdf_out))
             if pdf_out.exists():
                 await update.message.reply_document(open(pdf_out,"rb"), filename=pdf_out.name, caption="🇫🇷 Rapport PDF")
+            else:
+                await update.message.reply_text("PDF not created (file missing)")
         except Exception as e:
             log.error(f"PDF error: {e}")
+            await update.message.reply_text(f"PDF error: {e}")
         await update.message.reply_text("✅ Rapport envoyé!\nType /start for a new inspection.")
     except Exception as e:
         log.error(f"Report error: {e}")
