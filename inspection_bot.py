@@ -358,56 +358,35 @@ Respond ONLY with valid JSON:
 
 # ── DOCX to PDF ────────────────────────────────────────────────────────────
 def docx_to_pdf(docx_path, pdf_path):
-    """Convert Word report to PDF using fpdf2 — no system dependencies."""
-    from fpdf import FPDF
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Image as RLImage
+    from reportlab.lib.units import cm
     import re
-
-    doc = Document(docx_path)
-    pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=15)
-    pdf.set_margins(20, 20, 20)
-
-    font_regular = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-    font_bold    = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-
-    try:
-        pdf.add_font("DV",  "",  font_regular)
-        pdf.add_font("DV",  "B", font_bold)
-    except Exception:
-        pass
-
-    def clean(text):
-        # Remove emoji and non-latin chars that font can't handle
-        return re.sub(r'[^-À-ɏ’‘“”–—«»]', '', text)
-
-    pdf.add_page()
-    pdf.set_font("DV", size=10)
-
+    doc    = Document(docx_path)
+    story  = []
+    styles = getSampleStyleSheet()
     for para in doc.paragraphs:
-        text = clean(para.text.strip())
+        text = re.sub(r"[^\x00-\xFF]", "", para.text.strip())
         if not text:
-            pdf.ln(3)
-            continue
-        style = "B" if para.style.name.startswith("Heading") else ""
-        size  = 13 if "Heading 1" in para.style.name else (11 if "Heading" in para.style.name else 10)
-        pdf.set_font("DV", style=style, size=size)
-        pdf.multi_cell(0, 6, text)
-        pdf.ln(1)
-
-    # Add images
+            story.append(Spacer(1, 0.2*cm)); continue
+        if "Heading 1" in para.style.name: s = styles["Heading1"]
+        elif "Heading" in para.style.name: s = styles["Heading2"]
+        else: s = styles["Normal"]
+        story.append(Paragraph(text, s))
     for rel in doc.part.rels.values():
         if "image" in rel.reltype:
             try:
-                img_data = rel.target_part.blob
-                img = Image.open(io.BytesIO(img_data)).convert("RGB")
+                img = Image.open(io.BytesIO(rel.target_part.blob)).convert("RGB")
                 with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
                     img.save(tmp.name, "JPEG", quality=85)
-                    pdf.add_page()
-                    pdf.image(tmp.name, x=20, w=min(170, img.width * 0.26))
-            except Exception:
-                pass
-
-    pdf.output(pdf_path)
+                    w = min(15*cm, img.width * 0.026 * cm)
+                    story.append(RLImage(tmp.name, width=w, height=w*img.height/img.width))
+                    story.append(Spacer(1, 0.3*cm))
+            except Exception: pass
+    SimpleDocTemplate(pdf_path, pagesize=A4,
+        leftMargin=2*cm, rightMargin=2*cm,
+        topMargin=2*cm, bottomMargin=2*cm).build(story)
 
 # ── Report builder ─────────────────────────────────────────────────────────
 def build_report(session, lang):
