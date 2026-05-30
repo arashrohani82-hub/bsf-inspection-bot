@@ -3,4 +3,5 @@ anthropic
 python-docx
 pillow
 requests
+reportlab
 fpdf2
