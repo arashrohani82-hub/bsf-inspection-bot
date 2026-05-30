@@ -411,6 +411,26 @@ def build_report(session, lang):
 #  HANDLERS
 # ══════════════════════════════════════════════════════════════════════════════
 
+
+async def got_main_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    choice = update.message.text.strip()
+    if "Define" in choice or "project" in choice.lower():
+        await update.message.reply_text(
+            "➕ *Add new project*\n\nWhat is the *project name*?",
+            parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
+        return STATE_ADMIN_PROJECT_NAME
+    else:
+        chat_id = update.effective_chat.id
+        save_session(chat_id, {"groups":[], "plans":[], "davit_detail":None,
+                               "date": datetime.today().strftime("%Y-%m-%d")})
+        types = get_inspection_types()
+        buttons = [[t["label_fr"]] for t in types]
+        await update.message.reply_text(
+            "📝 What type of inspection?",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardMarkup(buttons, one_time_keyboard=True, resize_keyboard=True))
+        return STATE_INSPECTION_TYPE
+
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     clear_session(chat_id)
