@@ -315,15 +315,6 @@ def insert_photo_groups(doc, anchor_elem, groups, lang):
                 break
         insert_after = cap_elem
 
-        sev_elem = OxmlElement("w:p")
-        insert_after.addnext(sev_elem)
-        for p in doc.paragraphs:
-            if p._element is sev_elem:
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                r = p.add_run(severity); r.font.size = Pt(8)
-                break
-        insert_after = sev_elem
-
         spacer = OxmlElement("w:p")
         insert_after.addnext(spacer)
         insert_after = spacer
