@@ -612,25 +612,11 @@ async def got_group_caption_fr(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return STATE_GROUP_CAPTION_FR
     else:
         ctx.user_data["final_caption_fr"] = text
-    await update.message.reply_text(
-        f"*Suggested caption (EN):* {ai.get('caption_en')}\n\nAccept or type your own:",
-        parse_mode="Markdown",
-        reply_markup=ReplyKeyboardMarkup([[f"✅ {ai.get('caption_en')}"],["✏️ Write my own"]], one_time_keyboard=True, resize_keyboard=True))
-    return STATE_GROUP_CAPTION_EN
-
-async def got_group_caption_en(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
-    session = load_session(chat_id)
-    text    = update.message.text.strip()
-    ai      = ctx.user_data.get("pending_ai", {})
-    if text.startswith("✅ "):
-        caption_en = ai.get("caption_en","")
-    elif text == "✏️ Write my own":
-        await update.message.reply_text("✏️ Type your English caption:", reply_markup=ReplyKeyboardRemove())
-        return STATE_GROUP_CAPTION_EN
-    else:
-        caption_en = text
+    # Skip EN caption — use auto-translation from FR
     caption_fr = ctx.user_data.get("final_caption_fr","")
+    caption_en = ai.get("caption_en","")
+    chat_id    = update.effective_chat.id
+    session    = load_session(chat_id)
     session.setdefault("groups",[]).append({
         "caption_fr": caption_fr, "caption_en": caption_en,
         "severity": ai.get("severity","ok"),
@@ -638,7 +624,7 @@ async def got_group_caption_en(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     })
     save_session(chat_id, session)
     await update.message.reply_text(
-        f"✅ Group {len(session['groups'])} created.\n\n📸 Send next photo or type */done*.",
+        "✅ Group " + str(len(session['groups'])) + " created.\n\n📸 Send next photo or type */done*.",
         parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
     return STATE_PHOTO
 
@@ -793,7 +779,7 @@ def main():
             STATE_ELEMENT_ID:       [MessageHandler(filters.TEXT & ~filters.COMMAND, got_element_id)],
             STATE_PROBLEM:          [MessageHandler(filters.TEXT & ~filters.COMMAND, got_problem)],
             STATE_GROUP_CAPTION_FR: [MessageHandler(filters.TEXT & ~filters.COMMAND, got_group_caption_fr)],
-            STATE_GROUP_CAPTION_EN: [MessageHandler(filters.TEXT & ~filters.COMMAND, got_group_caption_en)],
+
         },
         fallbacks=[CommandHandler("cancel", cmd_cancel), CommandHandler("done", cmd_done)],
         allow_reentry=True,
