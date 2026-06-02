@@ -528,11 +528,11 @@ async def got_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     existing_types = [g.get("element_type","") for g in groups]
 
     if groups:
-        # Build buttons: existing groups + New group
-        buttons = [[g.get("element_type","Group") + " (" + str(len(g["photos"])) + " photos)"] for g in groups]
+        # Build buttons with index prefix for reliable matching
+        buttons = [["[" + str(i+1) + "] " + g.get("element_type","Group") + " (" + str(len(g["photos"])) + " photos)"] for i, g in enumerate(groups)]
         buttons.append(["🆕 New element type"])
         await update.message.reply_text(
-            "📷 Photo received!\n\nAdd to existing group or new element type?",
+            "📷 Photo received!\n\nAdd to which group?",
             reply_markup=ReplyKeyboardMarkup(buttons, one_time_keyboard=True, resize_keyboard=True))
         return STATE_GROUP_OR_ADD
     else:
