@@ -447,13 +447,15 @@ async def got_main_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
         save_session(chat_id, {"groups":[], "plans":[], "davit_detail":None,
                                "date": datetime.today().strftime("%Y-%m-%d")})
-        types = get_inspection_types()
-        buttons = [[t["label_fr"]] for t in types]
+        projects = get_projects()
+        if not projects:
+            await update.message.reply_text("⚠️ No projects found. Use 'Define new project' first.")
+            return STATE_MAIN_MENU
+        buttons = [[p["name"]] for p in projects]
         await update.message.reply_text(
-            "📝 What type of inspection?",
-            parse_mode="Markdown",
+            "📋 Which project?",
             reply_markup=ReplyKeyboardMarkup(buttons, one_time_keyboard=True, resize_keyboard=True))
-        return STATE_INSPECTION_TYPE
+        return STATE_PROJECT_SELECT
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
