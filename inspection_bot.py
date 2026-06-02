@@ -523,14 +523,17 @@ async def got_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await photo_file.download_to_drive(photo_path)
     ctx.user_data["pending_photo_path"] = photo_path
 
+    # Show existing groups as quick options
     groups = session.get("groups", [])
+    existing_types = [g.get("element_type","") for g in groups]
+
     if groups:
-        last = groups[-1]
-        n    = len(last["photos"])
+        # Build buttons: existing groups + New group
+        buttons = [[g.get("element_type","Group") + " (" + str(len(g["photos"])) + " photos)"] for g in groups]
+        buttons.append(["🆕 New element type"])
         await update.message.reply_text(
-            f"📷 Photo received!\n\nCurrent group: *{last.get('caption_en','Group')}* ({n} photo{'s' if n>1 else ''})\n\nAdd to this group or start a new one?",
-            parse_mode="Markdown",
-            reply_markup=ReplyKeyboardMarkup([["➕ Add to current group","🆕 New group"]], one_time_keyboard=True, resize_keyboard=True))
+            "📷 Photo received!\n\nAdd to existing group or new element type?",
+            reply_markup=ReplyKeyboardMarkup(buttons, one_time_keyboard=True, resize_keyboard=True))
         return STATE_GROUP_OR_ADD
     else:
         await update.message.reply_text(
@@ -571,13 +574,15 @@ ELEMENT_ID_QUESTIONS = {
 async def got_element_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     element = update.message.text.strip()
     ctx.user_data["element_type"] = element
-    question = ELEMENT_ID_QUESTIONS.get(element, "📍 *Element ID / number?*")
-    await update.message.reply_text(question, parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
-    return STATE_ELEMENT_ID
+    ctx.user_data["location"] = element
+    await update.message.reply_text(
+        "🔍 Describe the observation, or tap if no visible issue.",
+        reply_markup=ReplyKeyboardMarkup([["⏭ No visible issue"]], one_time_keyboard=True, resize_keyboard=True))
+    return STATE_PROBLEM
 
 async def got_element_id(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    element_id = update.message.text.strip()
-    ctx.user_data["location"] = f"{ctx.user_data.get('element_type','')} {element_id}"
+    # Element ID removed - go straight to problem
+    ctx.user_data["location"] = ctx.user_data.get("element_type","")
     await update.message.reply_text(
         "🔍 Describe the observation, or tap if no visible issue.",
         reply_markup=ReplyKeyboardMarkup([["⏭ No visible issue"]], one_time_keyboard=True, resize_keyboard=True))
@@ -618,6 +623,7 @@ async def got_group_caption_fr(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id    = update.effective_chat.id
     session    = load_session(chat_id)
     session.setdefault("groups",[]).append({
+        "element_type": ctx.user_data.get("element_type",""),
         "caption_fr": caption_fr, "caption_en": caption_en,
         "severity": ai.get("severity","ok"),
         "photos": [{"path": ctx.user_data["pending_photo_path"]}],
