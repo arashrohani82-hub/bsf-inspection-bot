@@ -100,6 +100,19 @@ def get_inspection_types():
     return load_db().get("inspection_types", [])
 
 
+
+# ── Auto caption by inspection type + element type ─────────────────────────
+CAPTION_MAP = {
+    ("Ancrage 1 an", "Anchor"):        "Inspection visuelle des ancrages",
+    ("Ancrage 1 an", "Davit"):         "Inspection visuelle des bossoirs",
+    ("Ancrage 1 an", "Cable"):         "Inspection visuelle des lignes de vie",
+    ("Ancrage 1 an", "Base / Socket"): "Inspection visuelle des socles",
+    ("Ancrage 5 ans", "Anchor"):       "Essai de traction des ancrages",
+    ("Ancrage 5 ans", "Davit"):        "Essai de traction des bossoirs",
+    ("Ancrage 5 ans", "Cable"):        "Inspection et essai des lignes de vie",
+    ("Ancrage 5 ans", "Base / Socket"):"Essai de traction des socles",
+}
+
 # ── Session helpers ────────────────────────────────────────────────────────
 def session_path(chat_id): return SESSIONS_DIR / f"{chat_id}.json"
 def load_session(chat_id):
@@ -705,22 +718,34 @@ async def got_element_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             log.error(f"API error: {e}")
             ai = {"caption_fr":"Observation à compléter","caption_en":"Observation to be completed","severity":"minor"}
         ctx.user_data["pending_ai"] = ai
+
+        # Get auto caption from inspection type + element type
+        inspection_type = session.get("inspection_type", "")
+        element_type    = ctx.user_data.get("element_type", "")
+        auto_caption    = CAPTION_MAP.get((inspection_type, element_type), ai.get("caption_fr","Observation à compléter"))
+
+        # Build caption options
+        options = [
+            ["✅ " + auto_caption],
+            ["✅ " + ai.get("caption_fr","")] if ai.get("caption_fr","") != auto_caption else None,
+            ["✏️ Write my own"],
+        ]
+        options = [o for o in options if o]  # remove None
+
+        ctx.user_data["auto_caption"] = auto_caption
         await update.message.reply_text(
-            "*Suggested caption (FR):* " + ai.get("caption_fr","") + "\n\nAccept or type your own:",
-            parse_mode="Markdown",
-            reply_markup=ReplyKeyboardMarkup(
-                [["✅ " + ai.get("caption_fr","")], ["✏️ Write my own"]],
-                one_time_keyboard=True, resize_keyboard=True))
+            "Choose caption or write your own:",
+            reply_markup=ReplyKeyboardMarkup(options, one_time_keyboard=True, resize_keyboard=True))
         return STATE_GROUP_CAPTION_FR
 
 async def got_group_caption_fr(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     ai   = ctx.user_data.get("pending_ai", {})
-    if text.startswith("✅ "):
-        ctx.user_data["final_caption_fr"] = ai.get("caption_fr","")
-    elif text == "✏️ Write my own":
+    if text == "✏️ Write my own":
         await update.message.reply_text("✏️ Type your French caption:", reply_markup=ReplyKeyboardRemove())
         return STATE_GROUP_CAPTION_FR
+    elif text.startswith("✅ "):
+        ctx.user_data["final_caption_fr"] = text[2:].strip()
     else:
         ctx.user_data["final_caption_fr"] = text
     # Skip EN caption — use auto-translation from FR
