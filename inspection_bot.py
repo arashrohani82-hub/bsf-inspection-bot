@@ -575,6 +575,22 @@ async def got_element_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     element = update.message.text.strip()
     ctx.user_data["element_type"] = element
     ctx.user_data["location"] = element
+
+    # Check if group with this element type already exists
+    chat_id = update.effective_chat.id
+    session = load_session(chat_id)
+    for i, g in enumerate(session.get("groups", [])):
+        if g.get("element_type","").strip() == element.strip():
+            # Add photo directly to existing group
+            session["groups"][i]["photos"].append({"path": ctx.user_data["pending_photo_path"]})
+            save_session(chat_id, session)
+            n = len(session["groups"][i]["photos"])
+            await update.message.reply_text(
+                "✅ Added to " + element + " (" + str(n) + " photos).\n\n📸 Send next photo or /done.",
+                reply_markup=ReplyKeyboardRemove())
+            return STATE_PHOTO
+
+    # No existing group — ask for observation to create new group
     await update.message.reply_text(
         "🔍 Describe the observation, or tap if no visible issue.",
         reply_markup=ReplyKeyboardMarkup([["⏭ No visible issue"]], one_time_keyboard=True, resize_keyboard=True))
