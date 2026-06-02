@@ -36,6 +36,7 @@ anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
     STATE_ELEMENT_TYPE,
     STATE_ELEMENT_ID,
     STATE_PROBLEM,
+    STATE_ELEMENT_STATUS,
     STATE_GROUP_CAPTION_FR,
     STATE_GROUP_CAPTION_EN,
     # Admin states
@@ -44,7 +45,7 @@ anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
     STATE_ADMIN_PROJECT_ADDRESS,
     STATE_ADMIN_PROJECT_PLANS,
     STATE_ADMIN_PROJECT_DAVIT,
-) = range(17)
+) = range(18)
 
 ELEMENT_TYPES = [
     ["Anchor", "Davit"],
@@ -422,7 +423,43 @@ def build_report(session, lang):
         photos_para = doc.add_paragraph()
     for run in photos_para.runs: run.text = ""
     if groups:
-        insert_photo_groups(doc, photos_para._element, groups, lang)
+        # Separate acceptable from non-acceptable photos
+        acceptable_groups   = []
+        intervention_groups = []
+
+        for group in groups:
+            acc_photos   = [p for p in group["photos"] if "Acceptable" in p.get("status","✅ Acceptable")]
+            inter_photos = [p for p in group["photos"] if "Acceptable" not in p.get("status","✅ Acceptable")]
+
+            if acc_photos:
+                g = dict(group); g["photos"] = acc_photos
+                acceptable_groups.append(g)
+            if inter_photos:
+                g = dict(group); g["photos"] = inter_photos
+                intervention_groups.append(g)
+
+        # Insert acceptable photos
+        if acceptable_groups:
+            insert_photo_groups(doc, photos_para._element, acceptable_groups, lang)
+
+        # Insert intervention section
+        if intervention_groups:
+            # Add section title
+            title_fr = "Éléments nécessitant une intervention"
+            title_en = "Elements requiring intervention"
+            title_text = title_fr if lang == "fr" else title_en
+
+            # Find last inserted element to add after
+            title_elem = OxmlElement("w:p")
+            photos_para._element.addnext(title_elem)
+            for p in doc.paragraphs:
+                if p._element is title_elem:
+                    r = p.add_run(title_text)
+                    r.bold = True
+                    r.font.size = Pt(11)
+                    break
+
+            insert_photo_groups(doc, title_elem, intervention_groups, lang)
 
     suffix = "FR" if lang=="fr" else "EN"
     fname  = f"{project.replace(' ','_')}_{date}_{suffix}.docx"
@@ -584,19 +621,29 @@ async def got_element_type(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     for i, g in enumerate(session.get("groups", [])):
         if g.get("element_type","").strip() == element.strip():
             # Add photo directly to existing group
-            session["groups"][i]["photos"].append({"path": ctx.user_data["pending_photo_path"]})
-            save_session(chat_id, session)
-            n = len(session["groups"][i]["photos"])
+            # Store which group to add to
+            ctx.user_data["add_to_group_idx"] = i
             await update.message.reply_text(
-                "✅ Added to " + element + " (" + str(n) + " photos).\n\n📸 Send next photo or /done.",
-                reply_markup=ReplyKeyboardRemove())
-            return STATE_PHOTO
+                "What is the status of this element?",
+                reply_markup=ReplyKeyboardMarkup([
+                    ["✅ Acceptable"],
+                    ["🔧 Réparation requise"],
+                    ["🔄 Remplacement requis"],
+                    ["❌ Rejeté"],
+                ], one_time_keyboard=True, resize_keyboard=True))
+            return STATE_ELEMENT_STATUS
 
-    # No existing group — ask for observation to create new group
+    # No existing group — ask status first
+    ctx.user_data.pop("add_to_group_idx", None)
     await update.message.reply_text(
-        "🔍 Describe the observation, or tap if no visible issue.",
-        reply_markup=ReplyKeyboardMarkup([["⏭ No visible issue"]], one_time_keyboard=True, resize_keyboard=True))
-    return STATE_PROBLEM
+        "What is the status of this element?",
+        reply_markup=ReplyKeyboardMarkup([
+            ["✅ Acceptable"],
+            ["🔧 Réparation requise"],
+            ["🔄 Remplacement requis"],
+            ["❌ Rejeté"],
+        ], one_time_keyboard=True, resize_keyboard=True))
+    return STATE_ELEMENT_STATUS
 
 async def got_element_id(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # Element ID removed - go straight to problem
@@ -625,6 +672,47 @@ async def got_problem(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         reply_markup=ReplyKeyboardMarkup([[f"✅ {ai.get('caption_fr')}"],["✏️ Write my own"]], one_time_keyboard=True, resize_keyboard=True))
     return STATE_GROUP_CAPTION_FR
 
+
+async def got_element_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    session = load_session(chat_id)
+    status  = update.message.text.strip()
+
+    idx = ctx.user_data.get("add_to_group_idx")
+    if idx is not None:
+        # Adding to existing group
+        session["groups"][idx]["photos"].append({
+            "path":   ctx.user_data["pending_photo_path"],
+            "status": status,
+        })
+        save_session(chat_id, session)
+        n = len(session["groups"][idx]["photos"])
+        await update.message.reply_text(
+            "✅ Added (" + str(n) + " photos).\n\n📸 Send next photo or /done.",
+            reply_markup=ReplyKeyboardRemove())
+        ctx.user_data.pop("add_to_group_idx", None)
+        return STATE_PHOTO
+    else:
+        # New group — status stored, then ask for caption
+        ctx.user_data["pending_status"] = status
+        await update.message.reply_text(
+            "🤖 Analysing photo with AI…")
+        try:
+            img_bytes = Path(ctx.user_data["pending_photo_path"]).read_bytes()
+            ai = analyse_photo(img_bytes, ctx.user_data.get("element_type","Unknown"),
+                              ctx.user_data.get("location","Unknown"), "")
+        except Exception as e:
+            log.error(f"API error: {e}")
+            ai = {"caption_fr":"Observation à compléter","caption_en":"Observation to be completed","severity":"minor"}
+        ctx.user_data["pending_ai"] = ai
+        await update.message.reply_text(
+            "*Suggested caption (FR):* " + ai.get("caption_fr","") + "\n\nAccept or type your own:",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardMarkup(
+                [["✅ " + ai.get("caption_fr","")], ["✏️ Write my own"]],
+                one_time_keyboard=True, resize_keyboard=True))
+        return STATE_GROUP_CAPTION_FR
+
 async def got_group_caption_fr(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     ai   = ctx.user_data.get("pending_ai", {})
@@ -644,7 +732,7 @@ async def got_group_caption_fr(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "element_type": ctx.user_data.get("element_type",""),
         "caption_fr": caption_fr, "caption_en": caption_en,
         "severity": ai.get("severity","ok"),
-        "photos": [{"path": ctx.user_data["pending_photo_path"]}],
+        "photos": [{"path": ctx.user_data["pending_photo_path"], "status": ctx.user_data.get("pending_status","✅ Acceptable")}],
     })
     save_session(chat_id, session)
     await update.message.reply_text(
