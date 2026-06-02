@@ -548,7 +548,7 @@ async def got_group_or_add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         save_session(chat_id, session)
         n = len(session["groups"][-1]["photos"])
         await update.message.reply_text(
-            f"✅ Photo added ({n} total).\n\n📸 Send another or type */done*.",
+            f"✅ Photo added ({n} total).\n\n📸 Send another, /done to finish, or /remove to delete last photo.",
             parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
         return STATE_PHOTO
     else:
@@ -627,6 +627,33 @@ async def got_group_caption_fr(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "✅ Group " + str(len(session['groups'])) + " created.\n\n📸 Send next photo or type */done*.",
         parse_mode="Markdown", reply_markup=ReplyKeyboardRemove())
     return STATE_PHOTO
+
+
+async def cmd_remove_last(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    session = load_session(chat_id)
+    groups  = session.get("groups", [])
+    if not groups:
+        await update.message.reply_text("No photos to remove.")
+        return
+    last_group = groups[-1]
+    photos     = last_group.get("photos", [])
+    if len(photos) > 1:
+        photos.pop()
+        last_group["photos"] = photos
+        save_session(chat_id, session)
+        await update.message.reply_text(
+            "Removed. Group now has " + str(len(photos)) + " photo(s).\n\nSend next photo or /done.",
+            reply_markup=ReplyKeyboardRemove())
+    elif len(photos) == 1:
+        groups.pop()
+        session["groups"] = groups
+        save_session(chat_id, session)
+        await update.message.reply_text(
+            "Removed. " + str(len(groups)) + " group(s) remaining.\n\nSend next photo or /done.",
+            reply_markup=ReplyKeyboardRemove())
+    else:
+        await update.message.reply_text("No photos to remove.")
 
 async def cmd_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -781,13 +808,14 @@ def main():
             STATE_GROUP_CAPTION_FR: [MessageHandler(filters.TEXT & ~filters.COMMAND, got_group_caption_fr)],
 
         },
-        fallbacks=[CommandHandler("cancel", cmd_cancel), CommandHandler("done", cmd_done)],
+        fallbacks=[CommandHandler("cancel", cmd_cancel), CommandHandler("done", cmd_done), CommandHandler("remove", cmd_remove_last)],
         allow_reentry=True,
     )
 
     app.add_handler(conv)
     app.add_handler(CommandHandler("projects", cmd_projects))
     app.add_handler(CommandHandler("status", cmd_status))
+    app.add_handler(CommandHandler("remove", cmd_remove_last))
 
     log.info("🚀 BSF Inspection Bot running…")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
