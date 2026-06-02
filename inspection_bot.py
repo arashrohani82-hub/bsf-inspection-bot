@@ -916,6 +916,7 @@ def main():
             STATE_GROUP_OR_ADD:     [MessageHandler(filters.TEXT & ~filters.COMMAND, got_group_or_add)],
             STATE_ELEMENT_TYPE:     [MessageHandler(filters.TEXT & ~filters.COMMAND, got_element_type)],
             STATE_ELEMENT_ID:       [MessageHandler(filters.TEXT & ~filters.COMMAND, got_element_id)],
+            STATE_ELEMENT_STATUS:   [MessageHandler(filters.TEXT & ~filters.COMMAND, got_element_status)],
             STATE_PROBLEM:          [MessageHandler(filters.TEXT & ~filters.COMMAND, got_problem)],
             STATE_GROUP_CAPTION_FR: [MessageHandler(filters.TEXT & ~filters.COMMAND, got_group_caption_fr)],
 
