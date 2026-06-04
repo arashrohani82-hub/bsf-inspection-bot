@@ -193,7 +193,7 @@ def add_label_to_image(img_path, label, output_path, display_width_px=800):
     new_h = int(img.height * ratio)
     img = img.resize((display_width_px, new_h), Image.LANCZOS)
     draw = ImageDraw.Draw(img)
-    font_size = display_width_px // 5
+    font_size = display_width_px // 3
     try:
         font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
     except:
