@@ -309,9 +309,7 @@ def insert_photo_groups(doc, anchor_elem, groups, lang):
                 img_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 if img_path and Path(img_path).exists():
                     try:
-                        labeled = img_path.replace(".jpg", f"_{label}.jpg")
-                        add_label_to_image(img_path, label, labeled)
-                        img_para.add_run().add_picture(labeled, width=Inches(2.7))
+                        img_para.add_run().add_picture(img_path, width=Inches(2.7))
                     except: img_para.add_run("[image error]")
 
             fill_cell(tbl.rows[0].cells[0], left,  left_label)
