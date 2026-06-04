@@ -188,22 +188,24 @@ def clear_section_if_empty(doc, placeholder_text, also_remove_headers=None):
 # ── Add label to image ─────────────────────────────────────────────────────
 def add_label_to_image(img_path, label, output_path, display_width_px=800):
     from PIL import Image, ImageDraw, ImageFont
-    img = Image.open(img_path).convert("RGB")
-    ratio = display_width_px / img.width
-    new_h = int(img.height * ratio)
-    img = img.resize((display_width_px, new_h), Image.LANCZOS)
+    # Work on ORIGINAL resolution — label stays sharp after resize
+    img  = Image.open(img_path).convert("RGB")
     draw = ImageDraw.Draw(img)
-    # Font = 15% of image height — always visible regardless of aspect ratio
-    font_size = max(60, int(new_h * 0.15))
+    # Font = 12% of original image height
+    font_size = max(80, int(img.height * 0.12))
     try:
         font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
     except:
         font = ImageFont.load_default()
-    pad  = font_size // 4
+    pad  = font_size // 3
     bbox = draw.textbbox((0, 0), label, font=font)
     w, h = bbox[2]-bbox[0], bbox[3]-bbox[1]
     draw.rectangle([0, 0, w+pad*2, h+pad*2], fill="white")
     draw.text((pad, pad), label, fill="black", font=font)
+    # Now resize for output
+    ratio = display_width_px / img.width
+    new_h = int(img.height * ratio)
+    img = img.resize((display_width_px, new_h), Image.LANCZOS)
     img.save(output_path, format="JPEG", quality=92)
     return output_path
 
