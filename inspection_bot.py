@@ -309,7 +309,14 @@ def insert_photo_groups(doc, anchor_elem, groups, lang):
                 img_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 if img_path and Path(img_path).exists():
                     try:
-                        img_para.add_run().add_picture(img_path, width=Inches(2.7))
+                        pil_img = Image.open(img_path).convert("RGB")
+                        if pil_img.width > 800:
+                            ratio = 800 / pil_img.width
+                            pil_img = pil_img.resize((800, int(pil_img.height*ratio)), Image.LANCZOS)
+                        buf = io.BytesIO()
+                        pil_img.save(buf, format="JPEG", quality=75)
+                        buf.seek(0)
+                        img_para.add_run().add_picture(buf, width=Inches(2.7))
                     except: img_para.add_run("[image error]")
 
             fill_cell(tbl.rows[0].cells[0], left,  left_label)
@@ -820,7 +827,9 @@ async def cmd_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("✅ Rapport envoyé!\nType /start for a new inspection.")
     except Exception as e:
         log.error(f"Report error: {e}")
-        await update.message.reply_text(f"❌ Error: {e}")
+        await update.message.reply_text(
+            "❌ Error: " + str(e) + "\n\nType /done again to retry.")
+        return STATE_PHOTO
     clear_session(chat_id)
     return ConversationHandler.END
 
