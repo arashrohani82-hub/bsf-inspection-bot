@@ -101,7 +101,7 @@ def get_inspection_types():
 
 
 
-# ── Auto caption by inspection type + element type ─────────────────────────
+# ── Auto caption by inspection type + element type  [redeploy trigger] ─────────────────────────
 CAPTION_MAP = {
     ("Ancrage 1 an", "Anchor"):        "Inspection visuelle des ancrages",
     ("Ancrage 1 an", "Davit"):         "Inspection visuelle des bossoirs",
