@@ -331,24 +331,56 @@ async def _send_report(chat_id: int, session_snapshot: dict, application) -> Non
                 text="⚠️ Word report was created, but PDF conversion failed.",
             )
 
-        certificate = await asyncio.to_thread(
-            bot.build_certificate, session_snapshot
-        )
-        if certificate is not None:
-            with open(certificate, "rb") as certificate_file:
-                await application.bot.send_document(
+        certificate_failed = False
+        if bot.report_profiles.is_anchor(
+            session_snapshot.get("inspection_type")
+        ):
+            try:
+                certificate = await asyncio.to_thread(
+                    bot.build_certificate, session_snapshot
+                )
+                if certificate is not None:
+                    with open(certificate, "rb") as certificate_file:
+                        await application.bot.send_document(
+                            chat_id=chat_id,
+                            document=certificate_file,
+                            filename=certificate.name,
+                            caption="📜 Certificat d’inspection Word",
+                        )
+            except Exception as exc:
+                certificate_failed = True
+                log.exception(
+                    "Certificate generation failed for chat %s", chat_id
+                )
+                await application.bot.send_message(
                     chat_id=chat_id,
-                    document=certificate_file,
-                    filename=certificate.name,
-                    caption="📜 Certificat d’inspection Word",
+                    text=(
+                        "⚠️ The report was created successfully, but the "
+                        "certificate could not be generated. The inspection "
+                        "was preserved."
+                    ),
                 )
 
         current = bot.load_session(chat_id)
-        if current.get("inspection_id") == session_snapshot.get("inspection_id"):
-            bot.clear_session(chat_id)
+        if certificate_failed:
+            current = current or session_snapshot
+            current["report_status"] = "certificate_failed"
+            current["report_error"] = str(exc)[:500]
+            bot.save_session(chat_id, current)
+            final_message = (
+                "✅ Rapport envoyé. Le certificat reste à générer."
+            )
+        else:
+            if current.get("inspection_id") == session_snapshot.get(
+                "inspection_id"
+            ):
+                bot.clear_session(chat_id)
+            final_message = (
+                "✅ Rapport envoyé!\nType /start for a new inspection."
+            )
         await application.bot.send_message(
             chat_id=chat_id,
-            text="✅ Rapport envoyé!\nType /start for a new inspection.",
+            text=final_message,
         )
     except Exception as exc:
         log.exception("Report generation failed for chat %s", chat_id)
