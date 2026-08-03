@@ -187,25 +187,36 @@ def clear_section_if_empty(doc, placeholder_text, also_remove_headers=None):
 
 # ── Add label to image ─────────────────────────────────────────────────────
 def add_label_to_image(img_path, label, output_path, display_width_px=800):
+    """Add a readable figure number to the top-left corner of a photo."""
     from PIL import Image, ImageDraw, ImageFont
-    # Work on ORIGINAL resolution — label stays sharp after resize
-    img  = Image.open(img_path).convert("RGB")
+
+    img = Image.open(img_path).convert("RGB")
     draw = ImageDraw.Draw(img)
-    # Font = 12% of original image height
-    font_size = max(80, int(img.height * 0.12))
+    font_size = max(28, min(72, int(img.height * 0.045)))
     try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
-    except:
+        font = ImageFont.truetype(
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            font_size,
+        )
+    except Exception:
         font = ImageFont.load_default()
-    pad  = font_size // 3
+
+    pad = max(8, font_size // 4)
     bbox = draw.textbbox((0, 0), label, font=font)
-    w, h = bbox[2]-bbox[0], bbox[3]-bbox[1]
-    draw.rectangle([0, 0, w+pad*2, h+pad*2], fill="white")
+    width, height = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    draw.rectangle(
+        [0, 0, width + pad * 2, height + pad * 2],
+        fill="white",
+        outline="black",
+        width=max(2, font_size // 18),
+    )
     draw.text((pad, pad), label, fill="black", font=font)
-    # Now resize for output
+
     ratio = display_width_px / img.width
-    new_h = int(img.height * ratio)
-    img = img.resize((display_width_px, new_h), Image.LANCZOS)
+    img = img.resize(
+        (display_width_px, max(1, int(img.height * ratio))),
+        Image.LANCZOS,
+    )
     img.save(output_path, format="JPEG", quality=92)
     return output_path
 
@@ -268,51 +279,123 @@ def insert_photos_vertical(doc, anchor_elem, photos, lang, img_width=5.5):
 
 # ── Insert photo groups ────────────────────────────────────────────────────
 def insert_photo_groups(doc, anchor_elem, groups, lang):
-    caption_k    = "caption_fr" if lang == "fr" else "caption_en"
+    caption_k = "caption_fr" if lang == "fr" else "caption_en"
     insert_after = anchor_elem
-    group_num    = 1
+    group_num = 1
 
     for group in groups:
-        photos   = group.get("photos", [])
-        caption  = group.get(caption_k, "")
-        severity = SEVERITY_MAP.get(group.get("severity","ok"), "")
-        n        = len(photos)
-        letters  = [chr(ord('a')+i) for i in range(n)]
-        fig_label = f"Fig. {group_num}" if n == 1 else f"Fig. {group_num}a à {group_num}{letters[-1]}"
+        photos = group.get("photos", [])
+        caption = group.get(caption_k, "")
+        n = len(photos)
+        letters = [chr(ord("a") + i) for i in range(n)]
+        fig_label = (
+            f"Fig. {group_num}"
+            if n == 1
+            else f"Fig. {group_num}a à {group_num}{letters[-1]}"
+        )
 
-        photos_padded = photos + [None] if len(photos) % 2 != 0 else photos
-        pairs = [(photos_padded[i], photos_padded[i+1]) for i in range(0, len(photos_padded), 2)]
+        photos_padded = photos + [None] if n % 2 else photos
+        pairs = [
+            (photos_padded[i], photos_padded[i + 1])
+            for i in range(0, len(photos_padded), 2)
+        ]
 
-        pair_idx = 0
-        for left, right in pairs:
-            left_idx    = pair_idx * 2
-            right_idx   = pair_idx * 2 + 1
-            left_label  = f"{group_num}{letters[left_idx]}"  if left_idx  < len(letters) else ""
-            right_label = f"{group_num}{letters[right_idx]}" if right_idx < len(letters) else ""
-            pair_idx   += 1
+        for pair_idx, (left, right) in enumerate(pairs):
+            left_idx = pair_idx * 2
+            right_idx = left_idx + 1
+            left_label = (
+                f"{group_num}{letters[left_idx]}"
+                if left_idx < len(letters)
+                else ""
+            )
+            right_label = (
+                f"{group_num}{letters[right_idx]}"
+                if right_idx < len(letters)
+                else ""
+            )
 
             tbl = doc.add_table(rows=1, cols=2)
+            tbl.autofit = False
             tblPr = tbl._tbl.tblPr
             if tblPr is None:
-                tblPr = OxmlElement("w:tblPr"); tbl._tbl.insert(0, tblPr)
-            tblBorders = OxmlElement("w:tblBorders")
-            for bn in ["top","left","bottom","right","insideH","insideV"]:
-                b = OxmlElement(f"w:{bn}"); b.set(qn("w:val"), "none"); tblBorders.append(b)
-            tblPr.append(tblBorders)
-            tblW = OxmlElement("w:tblW")
-            tblW.set(qn("w:w"), "9360"); tblW.set(qn("w:type"), "dxa"); tblPr.append(tblW)
+                tblPr = OxmlElement("w:tblPr")
+                tbl._tbl.insert(0, tblPr)
+
+            # Explicit table centering is needed because Word otherwise aligns
+            # an inserted table to the left edge of the text area.
+            tbl_jc = OxmlElement("w:jc")
+            tbl_jc.set(qn("w:val"), "center")
+            tblPr.append(tbl_jc)
+
+            tbl_indent = OxmlElement("w:tblInd")
+            tbl_indent.set(qn("w:w"), "0")
+            tbl_indent.set(qn("w:type"), "dxa")
+            tblPr.append(tbl_indent)
+
+            tbl_width = OxmlElement("w:tblW")
+            tbl_width.set(qn("w:w"), "8640")
+            tbl_width.set(qn("w:type"), "dxa")
+            tblPr.append(tbl_width)
+
+            tbl_layout = OxmlElement("w:tblLayout")
+            tbl_layout.set(qn("w:type"), "fixed")
+            tblPr.append(tbl_layout)
+
+            tbl_borders = OxmlElement("w:tblBorders")
+            for border_name in (
+                "top", "left", "bottom", "right", "insideH", "insideV"
+            ):
+                border = OxmlElement(f"w:{border_name}")
+                border.set(qn("w:val"), "none")
+                tbl_borders.append(border)
+            tblPr.append(tbl_borders)
+
+            for cell in tbl.rows[0].cells:
+                cell.width = Inches(3.0)
+                cell.vertical_alignment = 1
+                tc_width = cell._tc.get_or_add_tcPr().first_child_found_in(
+                    "w:tcW"
+                )
+                if tc_width is not None:
+                    tc_width.set(qn("w:w"), "4320")
+                    tc_width.set(qn("w:type"), "dxa")
 
             def fill_cell(cell, photo, label=""):
-                if photo is None: return
+                if photo is None:
+                    return
                 img_path = photo.get("path")
                 img_para = cell.paragraphs[0]
                 img_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                if img_path and Path(img_path).exists():
-                    try:
-                        img_para.add_run().add_picture(img_path, width=Inches(2.7))
-                    except: img_para.add_run("[image error]")
+                if not img_path or not Path(img_path).exists():
+                    return
 
-            fill_cell(tbl.rows[0].cells[0], left,  left_label)
+                labelled_path = None
+                try:
+                    with tempfile.NamedTemporaryFile(
+                        suffix=".jpg", delete=False
+                    ) as tmp:
+                        labelled_path = tmp.name
+                    add_label_to_image(
+                        img_path,
+                        f"Fig. {label}",
+                        labelled_path,
+                        display_width_px=900,
+                    )
+                    img_para.add_run().add_picture(
+                        labelled_path,
+                        width=Inches(2.7),
+                    )
+                except Exception as exc:
+                    log.warning("Could not insert labelled photo: %s", exc)
+                    img_para.add_run("[image error]")
+                finally:
+                    if labelled_path:
+                        try:
+                            Path(labelled_path).unlink(missing_ok=True)
+                        except Exception:
+                            pass
+
+            fill_cell(tbl.rows[0].cells[0], left, left_label)
             fill_cell(tbl.rows[0].cells[1], right, right_label)
 
             tbl_el = tbl._tbl
@@ -322,11 +405,12 @@ def insert_photo_groups(doc, anchor_elem, groups, lang):
 
         cap_elem = OxmlElement("w:p")
         insert_after.addnext(cap_elem)
-        for p in doc.paragraphs:
-            if p._element is cap_elem:
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                r = p.add_run(f"{fig_label} – {caption}")
-                r.italic = True; r.font.size = Pt(9)
+        for paragraph in doc.paragraphs:
+            if paragraph._element is cap_elem:
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                run = paragraph.add_run(f"{fig_label} – {caption}")
+                run.italic = True
+                run.font.size = Pt(9)
                 break
         insert_after = cap_elem
 
