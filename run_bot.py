@@ -11,9 +11,11 @@ from telegram.ext import (
 
 import inspection_bot as bot
 from hardened_runner import install_patches
+from runtime_config import install_runtime_config
 
 
 def main() -> None:
+    install_runtime_config()
     install_patches()
     app = Application.builder().token(bot.TELEGRAM_TOKEN).build()
 
