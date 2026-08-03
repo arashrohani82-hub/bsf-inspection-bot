@@ -206,7 +206,8 @@ def add_label_to_image(img_path, label, output_path, display_width_px=800):
         Image.LANCZOS,
     )
     draw = ImageDraw.Draw(img)
-    font_size = max(64, min(84, int(img.width * 0.085)))
+    # Keep the overlay visually equivalent to roughly 12–14 pt in Word.
+    font_size = max(36, min(54, int(img.width * 0.06)))
     font = None
     font_candidates = [
         Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
@@ -236,16 +237,29 @@ def add_label_to_image(img_path, label, output_path, display_width_px=800):
         except TypeError:
             font = ImageFont.load_default()
 
-    pad = max(10, font_size // 6)
+    # Inset the complete box so neither its border nor the text is clipped.
+    margin = max(8, font_size // 6)
+    pad = max(6, font_size // 8)
     bbox = draw.textbbox((0, 0), label, font=font)
     width, height = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    box = [
+        margin,
+        margin,
+        margin + width + pad * 2,
+        margin + height + pad * 2,
+    ]
     draw.rectangle(
-        [0, 0, width + pad * 2, height + pad * 2],
+        box,
         fill="white",
         outline="black",
-        width=max(2, font_size // 18),
+        width=max(2, font_size // 24),
     )
-    draw.text((pad, pad), label, fill="black", font=font)
+    draw.text(
+        (margin + pad - bbox[0], margin + pad - bbox[1]),
+        label,
+        fill="black",
+        font=font,
+    )
 
     img.save(output_path, format="JPEG", quality=92)
     return output_path
