@@ -638,9 +638,8 @@ def build_certificate(session):
             "lignes de vie, des bossoirs et des composantes accessibles"
         )
         validity = (
-            f"Le présent certificat est valide à compter du {date} pour une "
-            "période maximale de douze (12) mois, sous réserve des exclusions "
-            "et conditions qui y sont indiquées."
+            f"Certificat valide à compter du {date} pour une période maximale "
+            "de douze (12) mois, sous réserve des exclusions indiquées."
         )
     else:
         inspection_text = (
@@ -656,19 +655,16 @@ def build_certificate(session):
 
     body = (
         f"La présente attestation confirme que le système visé a fait l’objet "
-        f"de {inspection_text}, en référence au rapport d’inspection "
-        f"correspondant."
+        f"de {inspection_text}, conformément au rapport correspondant."
     )
     if mode == "with_exclusions":
         exclusion_text = "; ".join(exclusions) or (
             "les éléments expressément identifiés au rapport"
         )
         body += (
-            " Le présent certificat exclut les éléments suivants : "
-            f"{exclusion_text}. Ces éléments doivent demeurer hors service "
-            "ou faire l’objet des mesures de sécurité indiquées jusqu’à la "
-            "réalisation des correctifs et, lorsque requis, d’une nouvelle "
-            "inspection."
+            " Sont exclus du présent certificat : "
+            f"{exclusion_text}. Ils doivent demeurer hors service jusqu’aux "
+            "correctifs et, lorsque requis, à une nouvelle inspection."
         )
 
     doc = Document(template)
