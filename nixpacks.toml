@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["gobject-introspection", "cairo", "pango", "gdk-pixbuf", "libffi", "shared-mime-info"]
+nixPkgs = ["gobject-introspection", "cairo", "pango", "gdk-pixbuf", "libffi", "shared-mime-info", "dejavu_fonts"]
 
 [phases.install]
 cmds = ["pip install mammoth weasyprint pillow python-telegram-bot==21.6 anthropic python-docx requests"]

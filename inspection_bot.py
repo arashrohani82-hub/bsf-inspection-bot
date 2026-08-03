@@ -200,15 +200,36 @@ def add_label_to_image(img_path, label, output_path, display_width_px=800):
     )
     draw = ImageDraw.Draw(img)
     font_size = max(64, min(84, int(img.width * 0.085)))
-    try:
-        font = ImageFont.truetype(
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-            font_size,
+    font = None
+    font_candidates = [
+        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"),
+        Path("/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf"),
+    ]
+    nix_font_root = Path("/nix/store")
+    if nix_font_root.exists():
+        font_candidates.extend(
+            nix_font_root.glob(
+                "*dejavu-fonts*/share/fonts/truetype/DejaVuSans-Bold.ttf"
+            )
         )
-    except Exception:
-        font = ImageFont.load_default()
 
-    pad = max(14, font_size // 4)
+    for font_path in font_candidates:
+        if not font_path.exists():
+            continue
+        try:
+            font = ImageFont.truetype(str(font_path), font_size)
+            break
+        except Exception:
+            continue
+
+    if font is None:
+        try:
+            # Recent Pillow versions support a scalable bundled fallback.
+            font = ImageFont.load_default(size=font_size)
+        except TypeError:
+            font = ImageFont.load_default()
+
+    pad = max(10, font_size // 6)
     bbox = draw.textbbox((0, 0), label, font=font)
     width, height = bbox[2] - bbox[0], bbox[3] - bbox[1]
     draw.rectangle(
