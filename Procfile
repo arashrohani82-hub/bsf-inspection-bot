@@ -1,1 +1,1 @@
-worker: python inspection_bot.py
+worker: python run_bot.py
