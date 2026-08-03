@@ -191,8 +191,15 @@ def add_label_to_image(img_path, label, output_path, display_width_px=800):
     from PIL import Image, ImageDraw, ImageFont
 
     img = Image.open(img_path).convert("RGB")
+
+    # Resize first so the label keeps a consistent, readable size in Word.
+    ratio = display_width_px / img.width
+    img = img.resize(
+        (display_width_px, max(1, int(img.height * ratio))),
+        Image.LANCZOS,
+    )
     draw = ImageDraw.Draw(img)
-    font_size = max(28, min(72, int(img.height * 0.045)))
+    font_size = max(64, min(84, int(img.width * 0.085)))
     try:
         font = ImageFont.truetype(
             "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
@@ -201,7 +208,7 @@ def add_label_to_image(img_path, label, output_path, display_width_px=800):
     except Exception:
         font = ImageFont.load_default()
 
-    pad = max(8, font_size // 4)
+    pad = max(14, font_size // 4)
     bbox = draw.textbbox((0, 0), label, font=font)
     width, height = bbox[2] - bbox[0], bbox[3] - bbox[1]
     draw.rectangle(
@@ -212,11 +219,6 @@ def add_label_to_image(img_path, label, output_path, display_width_px=800):
     )
     draw.text((pad, pad), label, fill="black", font=font)
 
-    ratio = display_width_px / img.width
-    img = img.resize(
-        (display_width_px, max(1, int(img.height * ratio))),
-        Image.LANCZOS,
-    )
     img.save(output_path, format="JPEG", quality=92)
     return output_path
 
@@ -377,7 +379,7 @@ def insert_photo_groups(doc, anchor_elem, groups, lang):
                         labelled_path = tmp.name
                     add_label_to_image(
                         img_path,
-                        f"Fig. {label}",
+                        label,
                         labelled_path,
                         display_width_px=900,
                     )
