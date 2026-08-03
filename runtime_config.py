@@ -66,6 +66,27 @@ def install_runtime_config() -> None:
     def save_db(database: dict) -> None:
         _atomic_json_write(bot.DB_PATH, database)
 
+    # Refresh only the report-type catalog from the repository seed while
+    # preserving every project already stored on the Railway volume.
+    if bot.DB_PATH.exists() and seed_db.exists():
+        try:
+            runtime_database = json.loads(
+                bot.DB_PATH.read_text(encoding="utf-8")
+            )
+            seed_database = json.loads(seed_db.read_text(encoding="utf-8"))
+            seeded_types = seed_database.get("inspection_types", [])
+            if (
+                seeded_types
+                and runtime_database.get("inspection_types") != seeded_types
+            ):
+                runtime_database["inspection_types"] = seeded_types
+                save_db(runtime_database)
+                log.info(
+                    "Updated inspection type catalog without changing projects"
+                )
+        except (OSError, json.JSONDecodeError):
+            log.exception("Could not refresh inspection type catalog")
+
     def session_path(chat_id: int) -> Path:
         return bot.SESSIONS_DIR / f"{chat_id}.json"
 
