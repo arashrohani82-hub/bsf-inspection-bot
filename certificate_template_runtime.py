@@ -37,28 +37,49 @@ def _french_long_date(value: str) -> str:
     return f"{parsed.day} {months[parsed.month - 1]} {parsed.year}"
 
 
+def _normalize(text: str) -> str:
+    text = text.replace("’", "'").replace("–", "-").replace("—", "-")
+    return " ".join(text.split()).strip().lower()
+
+
 def _paragraph_text(paragraph_element) -> tuple[str, list]:
     text_nodes = list(paragraph_element.iter(qn("w:t")))
     return "".join(node.text or "" for node in text_nodes), text_nodes
 
 
-def _replace_matching_paragraphs(doc: Document, replacements) -> set[str]:
-    """Replace complete visible paragraphs, including text inside text boxes."""
+def _replace_paragraph(paragraph_element, replacement: str) -> bool:
+    _, text_nodes = _paragraph_text(paragraph_element)
+    if not text_nodes:
+        return False
+    text_nodes[0].text = replacement
+    for node in text_nodes[1:]:
+        node.text = ""
+    return True
+
+
+def _replace_best_matches(doc: Document, replacements) -> set[str]:
+    """Replace text in normal paragraphs and positioned Word text boxes.
+
+    Matching is intentionally tolerant because the original Word samples split
+    text across many runs and can contain non-breaking spaces and smart quotes.
+    """
     matched: set[str] = set()
-    for paragraph in doc.element.body.iter(qn("w:p")):
-        full_text, text_nodes = _paragraph_text(paragraph)
-        normalized = " ".join(full_text.split())
-        if not normalized or not text_nodes:
+    paragraphs = list(doc.element.body.iter(qn("w:p")))
+
+    for paragraph in paragraphs:
+        full_text, _ = _paragraph_text(paragraph)
+        normalized = _normalize(full_text)
+        if not normalized:
             continue
-        for key, predicate, replacement in replacements:
+
+        for key, tokens, replacement in replacements:
             if key in matched:
                 continue
-            if predicate(normalized):
-                text_nodes[0].text = replacement
-                for node in text_nodes[1:]:
-                    node.text = ""
-                matched.add(key)
+            if any(token in normalized for token in tokens):
+                if _replace_paragraph(paragraph, replacement):
+                    matched.add(key)
                 break
+
     return matched
 
 
@@ -84,35 +105,36 @@ def _build_from_original_template(session: dict) -> Path | None:
 
     if profile_name == "anchor_annual":
         heading = (
-            "Inspection annuelle des systèmes d’ancrage et de ligne de vie "
+            "Inspection annuelle des systèmes d’ancrage, des lignes de vie "
             "et des bossoirs"
         )
         body = (
-            "a fait l’objet d’une inspection annuelle complète ainsi que des "
-            "travaux d’entretien requis, réalisés conformément aux articles "
-            "11.8 et 12 de la norme CAN/CSA Z271, par un technicien qualifié de "
-            "BSF Inspections, en référence au rapport d’inspection correspondant."
+            "Le système visé a fait l’objet d’une inspection annuelle complète "
+            "ainsi que des travaux d’entretien requis, réalisés conformément aux "
+            "articles 11.8 et 12 de la norme CAN/CSA Z271, par un technicien "
+            "qualifié de BSF Inspections, en référence au rapport d’inspection "
+            "correspondant."
         )
         validity = (
-            f"VALIDITÉ DU CERTIFICAT : Certificat valide du {date} se terminant "
-            "dans les douze (12) mois suivant"
+            "VALIDITÉ DU CERTIFICAT : "
+            f"Certificat valide à compter du {_french_long_date(date)} pour une "
+            "période maximale de douze (12) mois."
         )
     else:
         heading = "Inspection quinquennale des systèmes d’ancrage et des bossoirs"
         body = (
             "La présente attestation confirme que l’unité d’accès suspendu visée "
             "a fait l’objet d’une inspection quinquennale comprenant l’examen "
-            "visuel des systèmes d’ancrage, des bossoirs ainsi que la réalisation "
+            "visuel des systèmes d’ancrage et des bossoirs ainsi que la réalisation "
             "des essais applicables, conformément aux exigences pertinentes des "
-            "normes CAN/CSA Z271, CSA Z91 et ASTM E3121 / E3121M, en référence au "
+            "normes CAN/CSA Z271, CSA Z91 et ASTM E3121/E3121M, en référence au "
             "rapport d’inspection correspondant."
         )
         validity = (
-            "VALIDITÉ DU CERTIFICAT :\n"
+            "VALIDITÉ DU CERTIFICAT : "
             "Le présent certificat confirme la réalisation de l’inspection "
-            f"quinquennale en date du {_french_long_date(date)}. Il demeure "
-            "entendu que les inspections annuelles requises doivent continuer "
-            "d’être effectuées indépendamment de la présente attestation."
+            f"quinquennale en date du {_french_long_date(date)}. Les inspections "
+            "annuelles requises doivent continuer d’être effectuées."
         )
 
     if mode == "with_exclusions":
@@ -129,38 +151,55 @@ def _build_from_original_template(session: dict) -> Path | None:
     replacements = [
         (
             "heading",
-            lambda text: (
-                "Inspection annuelle des systèmes" in text
-                or "Inspection quinquennale" in text
+            (
+                "inspection annuelle des systemes",
+                "inspection annuelle des systèmes",
+                "inspection quinquennale",
             ),
             heading,
         ),
         (
             "address",
-            lambda text: "ADRESSE D’INSTALLATION" in text.upper(),
+            (
+                "adresse d'installation",
+                "adresse d’installation",
+                "adresse de l'installation",
+                "adresse de l’installation",
+            ),
             f"ADRESSE D’INSTALLATION : {address}",
         ),
         (
             "body",
-            lambda text: (
-                "a fait l’objet d’une inspection annuelle" in text
-                or "La présente attestation confirme que l’unité d’accès suspendu" in text
+            (
+                "fait l'objet d'une inspection annuelle",
+                "fait l’objet d’une inspection annuelle",
+                "presente attestation confirme",
+                "présente attestation confirme",
+                "inspection quinquennale comprenant",
             ),
             body,
         ),
         (
             "validity",
-            lambda text: "VALIDITÉ DU CERTIFICAT" in text.upper(),
+            (
+                "validite du certificat",
+                "validité du certificat",
+                "certificat valide",
+            ),
             validity,
         ),
     ]
-    matched = _replace_matching_paragraphs(doc, replacements)
-    required = {"heading", "address", "body", "validity"}
-    missing = required - matched
+    matched = _replace_best_matches(doc, replacements)
+
+    # Do not discard the original BSF sample merely because one text box uses
+    # unexpected wording. Preserve its layout and replace every field found.
+    if not matched:
+        raise ValueError("No editable text was found in the original certificate template")
+    missing = {"heading", "address", "body", "validity"} - matched
     if missing:
-        raise ValueError(
-            "Original certificate template fields not found: "
-            + ", ".join(sorted(missing))
+        log.warning(
+            "Original certificate created with unmatched fields left intact: %s",
+            ", ".join(sorted(missing)),
         )
 
     bot.REPORTS_DIR.mkdir(parents=True, exist_ok=True)
