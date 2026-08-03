@@ -1,1 +1,1 @@
-worker: python inspection_bot.py
+worker: python hardened_runner.py
