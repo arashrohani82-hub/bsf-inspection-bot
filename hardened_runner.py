@@ -332,6 +332,7 @@ async def _send_report(chat_id: int, session_snapshot: dict, application) -> Non
             )
 
         certificate_failed = False
+        certificate_error = ""
         if bot.report_profiles.is_anchor(
             session_snapshot.get("inspection_type")
         ):
@@ -349,6 +350,7 @@ async def _send_report(chat_id: int, session_snapshot: dict, application) -> Non
                         )
             except Exception as exc:
                 certificate_failed = True
+                certificate_error = str(exc)[:500]
                 log.exception(
                     "Certificate generation failed for chat %s", chat_id
                 )
@@ -365,7 +367,7 @@ async def _send_report(chat_id: int, session_snapshot: dict, application) -> Non
         if certificate_failed:
             current = current or session_snapshot
             current["report_status"] = "certificate_failed"
-            current["report_error"] = str(exc)[:500]
+            current["report_error"] = certificate_error
             bot.save_session(chat_id, current)
             final_message = (
                 "✅ Rapport envoyé. Le certificat reste à générer."
