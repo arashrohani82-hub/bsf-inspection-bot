@@ -1,1 +1,1 @@
-worker: python hardened_runner.py
+worker: python run_bot.py
