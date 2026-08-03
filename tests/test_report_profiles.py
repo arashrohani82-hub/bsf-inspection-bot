@@ -21,6 +21,29 @@ class ReportProfileTests(unittest.TestCase):
         self.assertTrue(report_profiles.is_anchor("Ancrage – Inspection annuelle visuelle"))
         self.assertTrue(report_profiles.is_anchor("Ancrage – Inspection quinquennale (5 ans)"))
 
+    def test_canonical_ids_are_supported(self):
+        self.assertEqual(report_profiles.profile_key("facade"), "facade")
+        self.assertEqual(report_profiles.profile_key("parking"), "parking")
+        self.assertEqual(
+            report_profiles.profile_key("anchor_annual"),
+            "anchor_annual",
+        )
+        self.assertEqual(
+            report_profiles.profile_key("anchor_5year"),
+            "anchor_5year",
+        )
+
+    def test_unknown_or_empty_type_never_issues_certificate(self):
+        for value in (None, "", "Inspection type unavailable"):
+            with self.subTest(value=value):
+                self.assertFalse(report_profiles.is_anchor(value))
+                self.assertEqual(report_profiles.profile_key(value), "facade")
+
+    def test_facade_wording_never_issues_certificate(self):
+        for value in ("Inspection de la façade", "Facade inspection"):
+            with self.subTest(value=value):
+                self.assertFalse(report_profiles.is_anchor(value))
+
     def test_nonacceptable_group_becomes_certificate_exclusion(self):
         groups = [
             {
