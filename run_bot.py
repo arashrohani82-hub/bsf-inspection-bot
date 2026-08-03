@@ -79,6 +79,12 @@ def main() -> None:
             bot.STATE_ELEMENT_STATUS: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.got_element_status)],
             bot.STATE_PROBLEM: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.got_problem)],
             bot.STATE_GROUP_CAPTION_FR: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.got_group_caption_fr)],
+            bot.STATE_CERTIFICATE_DECISION: [
+                MessageHandler(
+                    filters.TEXT & ~filters.COMMAND,
+                    bot.got_certificate_decision,
+                )
+            ],
         },
         fallbacks=[
             CommandHandler("cancel", bot.cmd_cancel),
