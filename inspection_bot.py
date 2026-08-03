@@ -18,6 +18,8 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
+import report_profiles
+
 logging.basicConfig(format="%(asctime)s | %(levelname)s | %(message)s", level=logging.INFO)
 log = logging.getLogger(__name__)
 
@@ -45,14 +47,19 @@ anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
     STATE_ADMIN_PROJECT_ADDRESS,
     STATE_ADMIN_PROJECT_PLANS,
     STATE_ADMIN_PROJECT_DAVIT,
-) = range(18)
+    STATE_CERTIFICATE_DECISION,
+) = range(19)
 
 ELEMENT_TYPES = [
     ["Anchor", "Davit"],
     ["Cable", "Base / Socket"],
-    ["Facade", "Roof"],
-    ["Other"],
+    ["Roof", "Other"],
 ]
+
+
+def get_element_types_for_session(session):
+    return report_profiles.element_types(session.get("inspection_type"))
+
 
 SEVERITY_MAP = {
     "critical": "🔴 Critical",
@@ -444,12 +451,22 @@ def insert_photo_groups(doc, anchor_elem, groups, lang):
 
 
 # ── Claude Vision ──────────────────────────────────────────────────────────
-def analyse_photo(image_bytes, element_type, location, problem):
+def analyse_photo(
+    image_bytes,
+    element_type,
+    location,
+    problem,
+    inspection_type="",
+):
     import base64
     b64 = base64.standard_b64encode(image_bytes).decode()
-    prompt = f"""You are a structural engineer assistant specialized in suspended access systems
-(anchors, davits, lifelines, cables) inspected to CSA Z271 / CSA Z91 / ASTM E3121.
-Context: element={element_type}, location={location}, problem={problem or 'infer from image'}
+    domain_context = report_profiles.ai_context(inspection_type)
+    prompt = f"""You are an engineering inspection report assistant.
+Inspection context: {domain_context}
+Observed category: element={element_type}, location={location}.
+Inspector note: {problem or 'infer only the visible condition from the image'}.
+Do not claim that hidden conditions, measurements, destructive tests, or load
+tests were verified unless the inspector note explicitly says so.
 Respond ONLY with valid JSON:
 {{"caption_fr":"...","caption_en":"...","severity":"critical|major|moderate|minor|ok"}}"""
     for attempt in range(3):
@@ -503,7 +520,9 @@ def docx_to_pdf(docx_path, pdf_path):
 
 # ── Report builder ─────────────────────────────────────────────────────────
 def build_report(session, lang):
-    doc          = Document(TEMPLATE_PATH)
+    inspection_type = session.get("inspection_type", "")
+    template = report_profiles.template_path(BASE_DIR, inspection_type)
+    doc          = Document(template)
     project      = session.get("project_name", "—")
     address      = session.get("address", "—")
     date         = session.get("date", datetime.today().strftime("%Y-%m-%d"))
@@ -511,11 +530,18 @@ def build_report(session, lang):
     plans        = session.get("plans", [])
     davit_detail = session.get("davit_detail")
 
-    apply_replacements(doc, {
-        "{{Project_Name}}": project, "{{Address_of _project }}": address,
-        "{{Address_of_project}}": address, "{{Date }}": date, "{{Date}}": date,
+    replacements = {
+        "{{Project_Name}}": project,
+        "{{Address_of _project }}": address,
+        "{{Address_of_project}}": address,
+        "{{Date }}": date,
+        "{{Date}}": date,
         "{{caption}}": "",
-    })
+    }
+    replacements.update(
+        report_profiles.report_replacements(inspection_type, groups)
+    )
+    apply_replacements(doc, replacements)
 
     if plans:
         for para in doc.paragraphs:
@@ -583,8 +609,78 @@ def build_report(session, lang):
             insert_photo_groups(doc, title_elem, intervention_groups, lang)
 
     suffix = "FR" if lang=="fr" else "EN"
-    fname  = f"{project.replace(' ','_')}_{date}_{suffix}.docx"
-    out    = REPORTS_DIR / fname
+    profile_name = report_profiles.profile_key(inspection_type)
+    fname = f"{project.replace(' ','_')}_{profile_name}_{date}_{suffix}.docx"
+    out = REPORTS_DIR / fname
+    doc.save(out)
+    return out
+
+
+def build_certificate(session):
+    inspection_type = session.get("inspection_type", "")
+    template = report_profiles.certificate_template_path(
+        BASE_DIR, inspection_type
+    )
+    mode = session.get("certificate_mode", "none")
+    if template is None or mode == "none":
+        return None
+
+    project = session.get("project_name", "—")
+    address = session.get("address", "—")
+    date = session.get("date", datetime.today().strftime("%Y-%m-%d"))
+    groups = session.get("groups", [])
+    profile_name = report_profiles.profile_key(inspection_type)
+    exclusions = report_profiles.certificate_exclusions(groups)
+
+    if profile_name == "anchor_annual":
+        inspection_text = (
+            "une inspection visuelle annuelle des systèmes d’ancrage, des "
+            "lignes de vie, des bossoirs et des composantes accessibles"
+        )
+        validity = (
+            f"Certificat valide à compter du {date} pour une période maximale "
+            "de douze (12) mois, sous réserve des exclusions indiquées."
+        )
+    else:
+        inspection_text = (
+            "une inspection quinquennale des systèmes d’ancrage, des "
+            "bossoirs et des composantes accessibles, incluant les essais "
+            "applicables consignés au rapport"
+        )
+        validity = (
+            f"Le présent certificat confirme la réalisation de l’inspection "
+            f"quinquennale en date du {date}. Les inspections annuelles "
+            "requises doivent continuer d’être effectuées."
+        )
+
+    body = (
+        f"La présente attestation confirme que le système visé a fait l’objet "
+        f"de {inspection_text}, conformément au rapport correspondant."
+    )
+    if mode == "with_exclusions":
+        exclusion_text = "; ".join(exclusions) or (
+            "les éléments expressément identifiés au rapport"
+        )
+        body += (
+            " Sont exclus du présent certificat : "
+            f"{exclusion_text}. Ils doivent demeurer hors service jusqu’aux "
+            "correctifs et, lorsque requis, à une nouvelle inspection."
+        )
+
+    doc = Document(template)
+    apply_replacements(
+        doc,
+        {
+            "{{Project_Name}}": project,
+            "{{Address_of_project}}": address,
+            "{{Date}}": date,
+            "{{Certificate_Body}}": body,
+            "{{Certificate_Validity}}": validity,
+        },
+    )
+    out = REPORTS_DIR / (
+        f"{project.replace(' ', '_')}_Certificate_{profile_name}_{date}.docx"
+    )
     doc.save(out)
     return out
 

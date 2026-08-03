@@ -1,10 +1,29 @@
 {
   "inspection_types": [
-    {"id": "anchor_5y", "label_fr": "Ancrage 5 ans", "label_en": "5-Year Anchor Inspection"},
-    {"id": "anchor_1y", "label_fr": "Ancrage 1 an",  "label_en": "1-Year Anchor Inspection"},
-    {"id": "facade",    "label_fr": "Façade",         "label_en": "Facade Inspection"},
-    {"id": "parking",   "label_fr": "Stationnement",  "label_en": "Parking Inspection"},
-    {"id": "other",     "label_fr": "Autre",          "label_en": "Other"}
+    {
+      "id": "facade",
+      "name": "Façade – Inspection Loi 122",
+      "label_fr": "Façade – Inspection Loi 122",
+      "label_en": "Facade – Loi 122 Inspection"
+    },
+    {
+      "id": "parking",
+      "name": "Stationnement – Inspection Loi 122",
+      "label_fr": "Stationnement – Inspection Loi 122",
+      "label_en": "Parking – Loi 122 Inspection"
+    },
+    {
+      "id": "anchor_annual",
+      "name": "Ancrage – Inspection annuelle visuelle",
+      "label_fr": "Ancrage – Inspection annuelle visuelle",
+      "label_en": "Anchors – Annual Visual Inspection"
+    },
+    {
+      "id": "anchor_5year",
+      "name": "Ancrage – Inspection quinquennale (5 ans)",
+      "label_fr": "Ancrage – Inspection quinquennale (5 ans)",
+      "label_en": "Anchors – Five-Year Inspection"
+    }
   ],
   "projects": [
     {

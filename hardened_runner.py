@@ -185,7 +185,11 @@ async def got_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "📷 First photo!\n\n🔩 What *element type* is this?",
         parse_mode="Markdown",
-        reply_markup=ReplyKeyboardMarkup(bot.ELEMENT_TYPES, one_time_keyboard=True, resize_keyboard=True),
+        reply_markup=ReplyKeyboardMarkup(
+            bot.get_element_types_for_session(session),
+            one_time_keyboard=True,
+            resize_keyboard=True,
+        ),
     )
     return bot.STATE_ELEMENT_TYPE
 
@@ -231,8 +235,21 @@ async def got_group_or_add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     return bot.STATE_ELEMENT_STATUS
 
 
-async def analyse_photo_async(image_bytes: bytes, element_type: str, location: str, problem: str):
-    return await asyncio.to_thread(bot.analyse_photo, image_bytes, element_type, location, problem)
+async def analyse_photo_async(
+    image_bytes: bytes,
+    element_type: str,
+    location: str,
+    problem: str,
+    inspection_type: str,
+):
+    return await asyncio.to_thread(
+        bot.analyse_photo,
+        image_bytes,
+        element_type,
+        location,
+        problem,
+        inspection_type,
+    )
 
 
 async def got_element_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -255,6 +272,7 @@ async def got_element_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             ctx.user_data.get("element_type", "Unknown"),
             ctx.user_data.get("location", "Unknown"),
             "",
+            session.get("inspection_type", ""),
         )
     except Exception:
         log.exception("AI photo analysis failed")
@@ -313,6 +331,18 @@ async def _send_report(chat_id: int, session_snapshot: dict, application) -> Non
                 text="⚠️ Word report was created, but PDF conversion failed.",
             )
 
+        certificate = await asyncio.to_thread(
+            bot.build_certificate, session_snapshot
+        )
+        if certificate is not None:
+            with open(certificate, "rb") as certificate_file:
+                await application.bot.send_document(
+                    chat_id=chat_id,
+                    document=certificate_file,
+                    filename=certificate.name,
+                    caption="📜 Certificat d’inspection Word",
+                )
+
         current = bot.load_session(chat_id)
         if current.get("inspection_id") == session_snapshot.get("inspection_id"):
             bot.clear_session(chat_id)
@@ -332,30 +362,116 @@ async def _send_report(chat_id: int, session_snapshot: dict, application) -> Non
         )
 
 
-async def cmd_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+async def _queue_report(update: Update, ctx: ContextTypes.DEFAULT_TYPE, session: dict):
     chat_id = update.effective_chat.id
-    session = bot.load_session(chat_id)
     groups = session.get("groups", [])
     total = sum(len(g.get("photos", [])) for g in groups)
-    if not groups:
-        await update.message.reply_text("⚠️ No photos yet.")
-        return bot.STATE_PHOTO
-    if session.get("report_status") == "processing":
-        await update.message.reply_text("⏳ This report is already being generated.")
-        return bot.ConversationHandler.END
 
     session["report_status"] = "processing"
     session.pop("report_error", None)
     bot.save_session(chat_id, session)
     snapshot = copy.deepcopy(session)
 
+    certificate_note = ""
+    if bot.report_profiles.is_anchor(session.get("inspection_type")):
+        mode = session.get("certificate_mode", "none")
+        certificate_note = (
+            "\nCertificate: "
+            + {
+                "standard": "without exclusions",
+                "with_exclusions": "with exclusions",
+                "none": "not requested",
+            }.get(mode, mode)
+        )
+
     await update.message.reply_text(
         f"📝 Report queued for *{session.get('project_name', 'inspection')}*…\n"
-        f"{len(groups)} group(s), {total} photo(s). You can continue using Telegram.",
+        f"{len(groups)} group(s), {total} photo(s).{certificate_note}\n"
+        "You can continue using Telegram.",
         parse_mode="Markdown",
+        reply_markup=ReplyKeyboardRemove(),
     )
-    ctx.application.create_task(_send_report(chat_id, snapshot, ctx.application))
+    ctx.application.create_task(
+        _send_report(chat_id, snapshot, ctx.application)
+    )
     return bot.ConversationHandler.END
+
+
+async def cmd_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    session = bot.load_session(chat_id)
+    groups = session.get("groups", [])
+    if not groups:
+        await update.message.reply_text("⚠️ No photos yet.")
+        return bot.STATE_PHOTO
+    if session.get("report_status") == "processing":
+        await update.message.reply_text(
+            "⏳ This report is already being generated."
+        )
+        return bot.ConversationHandler.END
+
+    inspection_type = session.get("inspection_type", "")
+    if (
+        bot.report_profiles.is_anchor(inspection_type)
+        and not session.get("certificate_mode")
+    ):
+        exclusions = bot.report_profiles.certificate_exclusions(groups)
+        if exclusions:
+            buttons = [
+                ["⚠️ Émettre avec exclusions"],
+                ["❌ Ne pas émettre"],
+            ]
+            recommendation = (
+                "Some inspected elements require intervention or exclusion.\n"
+                "Recommended: issue the certificate with exclusions."
+            )
+        else:
+            buttons = [
+                ["✅ Émettre sans restriction"],
+                ["❌ Ne pas émettre"],
+            ]
+            recommendation = (
+                "All recorded elements are acceptable.\n"
+                "Recommended: issue the certificate without exclusions."
+            )
+
+        session["report_status"] = "draft"
+        bot.save_session(chat_id, session)
+        await update.message.reply_text(
+            "📜 *Certificate decision*\n\n" + recommendation,
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardMarkup(
+                buttons,
+                one_time_keyboard=True,
+                resize_keyboard=True,
+            ),
+        )
+        return bot.STATE_CERTIFICATE_DECISION
+
+    return await _queue_report(update, ctx, session)
+
+
+async def got_certificate_decision(
+    update: Update, ctx: ContextTypes.DEFAULT_TYPE
+):
+    chat_id = update.effective_chat.id
+    session = bot.load_session(chat_id)
+    choice = update.message.text.strip()
+
+    if "avec exclusions" in choice:
+        session["certificate_mode"] = "with_exclusions"
+    elif "sans restriction" in choice:
+        session["certificate_mode"] = "standard"
+    elif "Ne pas" in choice or "not" in choice.lower():
+        session["certificate_mode"] = "none"
+    else:
+        await update.message.reply_text(
+            "Please select one of the certificate options."
+        )
+        return bot.STATE_CERTIFICATE_DECISION
+
+    bot.save_session(chat_id, session)
+    return await _queue_report(update, ctx, session)
 
 
 async def cmd_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -379,6 +495,7 @@ def install_patches() -> None:
     bot.got_photo = got_photo
     bot.got_group_or_add = got_group_or_add
     bot.got_element_status = got_element_status
+    bot.got_certificate_decision = got_certificate_decision
     bot.cmd_done = cmd_done
     bot.cmd_status = cmd_status
 
