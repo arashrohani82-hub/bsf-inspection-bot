@@ -14,8 +14,42 @@ from hardened_runner import install_patches
 from runtime_config import install_runtime_config
 
 
+def install_inspection_type_compatibility() -> None:
+    """Normalize legacy project JSON inspection-type records to display labels."""
+    original_get_inspection_types = bot.get_inspection_types
+
+    def normalized_inspection_types():
+        normalized = []
+        for item in original_get_inspection_types() or []:
+            if isinstance(item, str):
+                label = item.strip()
+            elif isinstance(item, dict):
+                label = ""
+                for key in ("name", "label", "title", "type", "inspection_type"):
+                    value = item.get(key)
+                    if isinstance(value, str) and value.strip():
+                        label = value.strip()
+                        break
+                if not label and len(item) == 1:
+                    value = next(iter(item.values()))
+                    if isinstance(value, str):
+                        label = value.strip()
+                if not label:
+                    bot.log.warning("Ignoring invalid inspection type record: %r", item)
+                    continue
+            else:
+                label = str(item).strip()
+
+            if label and label not in normalized:
+                normalized.append(label)
+        return normalized
+
+    bot.get_inspection_types = normalized_inspection_types
+
+
 def main() -> None:
     install_runtime_config()
+    install_inspection_type_compatibility()
     install_patches()
     app = Application.builder().token(bot.TELEGRAM_TOKEN).build()
 
@@ -59,8 +93,6 @@ def main() -> None:
     app.add_handler(CommandHandler("projects", bot.cmd_projects))
     app.add_handler(CommandHandler("status", bot.cmd_status))
     app.add_handler(CommandHandler("remove", bot.cmd_remove_last))
-    # These global handlers make report retry possible even after a restart or
-    # after the ConversationHandler has ended.
     app.add_handler(CommandHandler("done", bot.cmd_done))
     app.add_handler(CommandHandler("retry", bot.cmd_done))
 
