@@ -119,14 +119,25 @@ PROFILES = {
 }
 
 
-def profile_key(value: str | None) -> str:
+def matched_profile_key(value: str | None) -> str | None:
+    """Return a profile only when the inspection type is explicitly recognized."""
     normalized = (value or "").strip().lower()
+    if not normalized:
+        return None
     for key, profile in PROFILES.items():
+        if normalized == key:
+            return key
         if normalized == profile["label"].lower():
             return key
         if any(alias in normalized for alias in profile["aliases"]):
             return key
-    return "anchor_annual"
+    return None
+
+
+def profile_key(value: str | None) -> str:
+    # Unknown legacy sessions must never become anchor inspections implicitly.
+    # Facade is the conservative report-only fallback.
+    return matched_profile_key(value) or "facade"
 
 
 def profile(value: str | None) -> dict:
@@ -162,7 +173,10 @@ def certificate_template_path(base_dir: Path, inspection_type: str | None) -> Pa
 
 
 def is_anchor(inspection_type: str | None) -> bool:
-    return profile_key(inspection_type).startswith("anchor_")
+    return matched_profile_key(inspection_type) in {
+        "anchor_annual",
+        "anchor_5year",
+    }
 
 
 def element_types(inspection_type: str | None) -> list[list[str]]:
