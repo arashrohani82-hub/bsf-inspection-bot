@@ -11,6 +11,7 @@ from telegram.ext import (
 
 import inspection_bot as bot
 from ai_runtime import install_ai_runtime
+from certificate_fallback import install_certificate_fallback
 from hardened_runner import install_patches
 from runtime_config import install_runtime_config
 
@@ -52,6 +53,7 @@ def main() -> None:
     install_runtime_config()
     install_inspection_type_compatibility()
     install_ai_runtime()
+    install_certificate_fallback()
     install_patches()
     app = Application.builder().token(bot.TELEGRAM_TOKEN).build()
 
