@@ -70,10 +70,31 @@ def _status_keyboard() -> ReplyKeyboardMarkup:
 
 
 def install_facade_workflow() -> None:
+    original_got_group_or_add = bot.got_group_or_add
     original_got_element_type = bot.got_element_type
     original_got_problem = bot.got_problem
     original_got_element_status = bot.got_element_status
     original_build_report = bot.build_report
+
+    async def got_group_or_add(update, ctx: ContextTypes.DEFAULT_TYPE):
+        session = bot.load_session(update.effective_chat.id)
+        choice = update.message.text.strip()
+        if _is_facade_session(session) and (
+            "New element" in choice or choice.startswith("🆕")
+        ):
+            ctx.user_data.pop("facade_direction", None)
+            ctx.user_data.pop("facade_anomaly", None)
+            ctx.user_data.pop("add_to_group_idx", None)
+            await update.message.reply_text(
+                "🆕 Nouvelle observation\n\nSur quelle façade se trouve-t-elle?",
+                reply_markup=ReplyKeyboardMarkup(
+                    FACADE_DIRECTIONS,
+                    one_time_keyboard=True,
+                    resize_keyboard=True,
+                ),
+            )
+            return bot.STATE_ELEMENT_TYPE
+        return await original_got_group_or_add(update, ctx)
 
     async def got_element_type(update, ctx: ContextTypes.DEFAULT_TYPE):
         session = bot.load_session(update.effective_chat.id)
@@ -131,7 +152,6 @@ def install_facade_workflow() -> None:
         ctx.user_data["location"] = direction
         ctx.user_data["facade_caption"] = ANOMALY_CAPTIONS[anomaly]
 
-        # Reuse an existing direction/anomaly group when one already exists.
         for index, group in enumerate(session.get("groups", [])):
             if group.get("element_type", "").strip() == group_label:
                 ctx.user_data["add_to_group_idx"] = index
@@ -139,16 +159,12 @@ def install_facade_workflow() -> None:
         else:
             ctx.user_data.pop("add_to_group_idx", None)
 
-        if anomaly == "Aucune anomalie visible":
-            await update.message.reply_text(
-                "Quel est le statut de cet élément?",
-                reply_markup=_status_keyboard(),
-            )
-        else:
-            await update.message.reply_text(
-                "Quel niveau d’intervention doit être attribué à cette observation?",
-                reply_markup=_status_keyboard(),
-            )
+        prompt = (
+            "Quel est le statut de cet élément?"
+            if anomaly == "Aucune anomalie visible"
+            else "Quel niveau d’intervention doit être attribué à cette observation?"
+        )
+        await update.message.reply_text(prompt, reply_markup=_status_keyboard())
         return bot.STATE_ELEMENT_STATUS
 
     async def got_element_status(update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -160,8 +176,6 @@ def install_facade_workflow() -> None:
         if idx is not None:
             return await original_got_element_status(update, ctx)
 
-        # Force a deterministic professional caption while retaining the option
-        # to type a more detailed field observation.
         ctx.user_data["auto_caption"] = ctx.user_data["facade_caption"]
         ctx.user_data["pending_ai"] = {
             "caption_fr": ctx.user_data["facade_caption"],
@@ -199,10 +213,6 @@ def install_facade_workflow() -> None:
         ordered["groups"] = sorted(ordered.get("groups", []), key=sort_key)
         return original_build_report(ordered, lang)
 
-    bot.get_element_types_for_session_original = getattr(
-        bot, "get_element_types_for_session", None
-    )
-
     original_get_element_types = bot.get_element_types_for_session
 
     def get_element_types_for_session(session: dict):
@@ -211,6 +221,7 @@ def install_facade_workflow() -> None:
         return original_get_element_types(session)
 
     bot.get_element_types_for_session = get_element_types_for_session
+    bot.got_group_or_add = got_group_or_add
     bot.got_element_type = got_element_type
     bot.got_problem = got_problem
     bot.got_element_status = got_element_status
