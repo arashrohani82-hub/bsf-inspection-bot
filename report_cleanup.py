@@ -6,6 +6,9 @@ import logging
 from pathlib import Path
 
 from docx import Document
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+from docx.shared import Inches
 
 import inspection_bot as bot
 
@@ -33,21 +36,15 @@ def _facade_issues(groups: list[dict]) -> list[str]:
         if not has_recorded_anomaly and not has_nonacceptable_status:
             continue
 
-        caption = (
-            group.get("caption_fr")
-            or label
-            or "Élément inspecté"
-        )
+        caption = group.get("caption_fr") or label or "Élément inspecté"
         status_text = ", ".join(sorted(statuses))
         results.append(f"{caption} ({status_text})")
     return results
 
 
-def _renumber_facade_headings(path: Path) -> None:
+def _renumber_facade_headings(doc: Document) -> bool:
     """Correct the skipped section number in the generated facade DOCX."""
-    doc = Document(path)
     changed = False
-
     for paragraph in doc.paragraphs:
         text = paragraph.text.strip()
         if text.startswith("10. Limitations et réserves"):
@@ -63,10 +60,66 @@ def _renumber_facade_headings(path: Path) -> None:
             else:
                 paragraph.text = replacement
             changed = True
+    return changed
+
+
+def _table_contains_picture(table_element) -> bool:
+    """Return True when a Word table contains at least one embedded picture."""
+    return bool(table_element.xpath(".//a:blip"))
+
+
+def _insert_page_break_before_first_photo_table(doc: Document) -> bool:
+    """Start the photo appendix on a fresh page below the recurring header."""
+    body = doc._body._body
+    first_photo_table = None
+    for child in body.iterchildren():
+        if child.tag == qn("w:tbl") and _table_contains_picture(child):
+            first_photo_table = child
+            break
+
+    if first_photo_table is None:
+        return False
+
+    previous = first_photo_table.getprevious()
+    if previous is not None and previous.tag == qn("w:p"):
+        # Avoid adding duplicate page breaks when a report is processed twice.
+        if previous.xpath(".//w:br[@w:type='page']") or previous.xpath(
+            ".//w:pageBreakBefore"
+        ):
+            return False
+
+    page_paragraph = OxmlElement("w:p")
+    ppr = OxmlElement("w:pPr")
+    page_before = OxmlElement("w:pageBreakBefore")
+    ppr.append(page_before)
+    page_paragraph.append(ppr)
+    first_photo_table.addprevious(page_paragraph)
+    return True
+
+
+def _protect_header_clearance(doc: Document) -> bool:
+    """Keep body content below the BSF header on every generated page."""
+    changed = False
+    for section in doc.sections:
+        if section.top_margin is None or section.top_margin < Inches(1.15):
+            section.top_margin = Inches(1.15)
+            changed = True
+        if section.header_distance is None or section.header_distance > Inches(0.45):
+            section.header_distance = Inches(0.35)
+            changed = True
+    return changed
+
+
+def _cleanup_facade_report(path: Path) -> None:
+    doc = Document(path)
+    changed = False
+    changed = _renumber_facade_headings(doc) or changed
+    changed = _insert_page_break_before_first_photo_table(doc) or changed
+    changed = _protect_header_clearance(doc) or changed
 
     if changed:
         doc.save(path)
-        log.info("Corrected facade report section numbering in %s", path)
+        log.info("Applied final facade layout cleanup to %s", path)
 
 
 def install_report_cleanup() -> None:
@@ -86,7 +139,7 @@ def install_report_cleanup() -> None:
         if bot.report_profiles.profile_key(
             session.get("inspection_type")
         ) == "facade":
-            _renumber_facade_headings(Path(output))
+            _cleanup_facade_report(Path(output))
         return output
 
     bot.report_profiles._issues = issues
