@@ -13,6 +13,7 @@ import inspection_bot as bot
 from ai_runtime import install_ai_runtime
 from certificate_fallback import install_certificate_fallback
 from certificate_template_runtime import install_original_certificate_templates
+from facade_workflow import install_facade_workflow
 from hardened_runner import install_patches
 from runtime_config import install_runtime_config
 
@@ -54,11 +55,12 @@ def main() -> None:
     install_runtime_config()
     install_inspection_type_compatibility()
     install_ai_runtime()
-    # Keep a basic emergency generator, but make the user's original BSF
-    # one-page certificate samples the normal production path.
     install_certificate_fallback()
     install_original_certificate_templates()
     install_patches()
+    # Install last so the facade-specific direction/anomaly flow wraps the
+    # hardened generic handlers without changing parking or anchor inspections.
+    install_facade_workflow()
     app = Application.builder().token(bot.TELEGRAM_TOKEN).build()
 
     conversation = ConversationHandler(
