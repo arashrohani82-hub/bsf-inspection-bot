@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 
-from telegram import ReplyKeyboardMarkup
+from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes
 
 import inspection_bot as bot
@@ -12,6 +12,12 @@ import inspection_bot as bot
 FACADE_DIRECTIONS = [
     ["Façade nord", "Façade sud"],
     ["Façade est", "Façade ouest"],
+]
+
+SECTION_SETUP = [
+    ["🏢 Bâtiment sans sous-sections"],
+    ["🏨 Hôtel + Résidentiel"],
+    ["✏️ Définir mes sections"],
 ]
 
 FACADE_ANOMALIES = [
@@ -49,7 +55,11 @@ DIRECTION_ORDER = {
     "Façade ouest": 3,
 }
 
-ANOMALY_ORDER = {name: index for index, row in enumerate(FACADE_ANOMALIES) for name in row}
+ANOMALY_ORDER = {
+    name: index
+    for index, row in enumerate(FACADE_ANOMALIES)
+    for name in row
+}
 
 
 def _is_facade_session(session: dict) -> bool:
@@ -69,12 +79,56 @@ def _status_keyboard() -> ReplyKeyboardMarkup:
     )
 
 
+def _section_keyboard(sections: list[str]) -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        [[section] for section in sections],
+        one_time_keyboard=True,
+        resize_keyboard=True,
+    )
+
+
+def _clean_sections(text: str) -> list[str]:
+    raw_items = text.replace(";", ",").replace("\n", ",").split(",")
+    sections: list[str] = []
+    for item in raw_items:
+        value = item.strip()
+        if value and value not in sections:
+            sections.append(value)
+    return sections[:12]
+
+
 def install_facade_workflow() -> None:
+    original_got_project_select = bot.got_project_select
     original_got_group_or_add = bot.got_group_or_add
     original_got_element_type = bot.got_element_type
+    original_got_element_id = bot.got_element_id
     original_got_problem = bot.got_problem
     original_got_element_status = bot.got_element_status
     original_build_report = bot.build_report
+
+    async def got_project_select(update, ctx: ContextTypes.DEFAULT_TYPE):
+        result = await original_got_project_select(update, ctx)
+        session = bot.load_session(update.effective_chat.id)
+        if not _is_facade_session(session) or result != bot.STATE_PHOTO:
+            return result
+
+        # The configuration belongs to this inspection session, not permanently
+        # to the project, because the same project may be divided differently in
+        # a future mandate.
+        session.pop("facade_sections", None)
+        bot.save_session(update.effective_chat.id, session)
+        ctx.user_data["facade_stage"] = "configure_sections"
+        await update.message.reply_text(
+            "🏢 *Configuration du rapport de façade*\n\n"
+            "Quelles sections du bâtiment doivent être distinguées dans ce rapport?",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardMarkup(
+                SECTION_SETUP,
+                one_time_keyboard=True,
+                resize_keyboard=True,
+            ),
+        )
+        return bot.STATE_ELEMENT_ID
 
     async def got_group_or_add(update, ctx: ContextTypes.DEFAULT_TYPE):
         session = bot.load_session(update.effective_chat.id)
@@ -82,9 +136,13 @@ def install_facade_workflow() -> None:
         if _is_facade_session(session) and (
             "New element" in choice or choice.startswith("🆕")
         ):
-            ctx.user_data.pop("facade_direction", None)
-            ctx.user_data.pop("facade_anomaly", None)
-            ctx.user_data.pop("add_to_group_idx", None)
+            for key in (
+                "facade_direction",
+                "facade_section",
+                "facade_anomaly",
+                "add_to_group_idx",
+            ):
+                ctx.user_data.pop(key, None)
             await update.message.reply_text(
                 "🆕 Nouvelle observation\n\nSur quelle façade se trouve-t-elle?",
                 reply_markup=ReplyKeyboardMarkup(
@@ -117,15 +175,108 @@ def install_facade_workflow() -> None:
         ctx.user_data["facade_direction"] = direction
         ctx.user_data["location"] = direction
         ctx.user_data.pop("add_to_group_idx", None)
+
+        sections = session.get("facade_sections") or ["Bâtiment"]
+        if len(sections) == 1:
+            ctx.user_data["facade_section"] = sections[0]
+            await update.message.reply_text(
+                f"🏢 {direction}\n\nQuel type d’anomalie est visible?",
+                reply_markup=ReplyKeyboardMarkup(
+                    FACADE_ANOMALIES,
+                    one_time_keyboard=True,
+                    resize_keyboard=True,
+                ),
+            )
+            return bot.STATE_PROBLEM
+
+        ctx.user_data["facade_stage"] = "select_section"
         await update.message.reply_text(
-            f"🏢 {direction}\n\nQuel type d’anomalie est visible?",
-            reply_markup=ReplyKeyboardMarkup(
-                FACADE_ANOMALIES,
-                one_time_keyboard=True,
-                resize_keyboard=True,
-            ),
+            f"🏢 {direction}\n\nDans quelle section du bâtiment?",
+            reply_markup=_section_keyboard(sections),
         )
-        return bot.STATE_PROBLEM
+        return bot.STATE_ELEMENT_ID
+
+    async def got_element_id(update, ctx: ContextTypes.DEFAULT_TYPE):
+        session = bot.load_session(update.effective_chat.id)
+        if not _is_facade_session(session):
+            return await original_got_element_id(update, ctx)
+
+        stage = ctx.user_data.get("facade_stage")
+        choice = update.message.text.strip()
+
+        if stage == "configure_sections":
+            if choice == "🏢 Bâtiment sans sous-sections":
+                sections = ["Bâtiment"]
+            elif choice == "🏨 Hôtel + Résidentiel":
+                sections = ["Hôtel", "Résidentiel"]
+            elif choice == "✏️ Définir mes sections":
+                ctx.user_data["facade_stage"] = "custom_sections"
+                await update.message.reply_text(
+                    "Écrivez les sections séparées par des virgules.\n"
+                    "Exemple : Hôtel, Résidentiel, Basilaire",
+                    reply_markup=ReplyKeyboardRemove(),
+                )
+                return bot.STATE_ELEMENT_ID
+            else:
+                await update.message.reply_text(
+                    "Veuillez choisir une option de configuration.",
+                    reply_markup=ReplyKeyboardMarkup(
+                        SECTION_SETUP,
+                        one_time_keyboard=True,
+                        resize_keyboard=True,
+                    ),
+                )
+                return bot.STATE_ELEMENT_ID
+
+            session["facade_sections"] = sections
+            bot.save_session(update.effective_chat.id, session)
+            ctx.user_data.pop("facade_stage", None)
+            await update.message.reply_text(
+                "✅ Sections du rapport : " + ", ".join(sections) +
+                "\n\n📸 Envoyez la première photo d’inspection.",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+            return bot.STATE_PHOTO
+
+        if stage == "custom_sections":
+            sections = _clean_sections(choice)
+            if not sections:
+                await update.message.reply_text(
+                    "Aucune section valide détectée. Exemple : Hôtel, Résidentiel"
+                )
+                return bot.STATE_ELEMENT_ID
+            session["facade_sections"] = sections
+            bot.save_session(update.effective_chat.id, session)
+            ctx.user_data.pop("facade_stage", None)
+            await update.message.reply_text(
+                "✅ Sections du rapport : " + ", ".join(sections) +
+                "\n\n📸 Envoyez la première photo d’inspection.",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+            return bot.STATE_PHOTO
+
+        if stage == "select_section":
+            sections = session.get("facade_sections") or ["Bâtiment"]
+            if choice not in sections:
+                await update.message.reply_text(
+                    "Veuillez sélectionner une section du bâtiment.",
+                    reply_markup=_section_keyboard(sections),
+                )
+                return bot.STATE_ELEMENT_ID
+            ctx.user_data["facade_section"] = choice
+            ctx.user_data.pop("facade_stage", None)
+            direction = ctx.user_data.get("facade_direction", "Façade")
+            await update.message.reply_text(
+                f"🏢 {direction} — {choice}\n\nQuel type d’anomalie est visible?",
+                reply_markup=ReplyKeyboardMarkup(
+                    FACADE_ANOMALIES,
+                    one_time_keyboard=True,
+                    resize_keyboard=True,
+                ),
+            )
+            return bot.STATE_PROBLEM
+
+        return await original_got_element_id(update, ctx)
 
     async def got_problem(update, ctx: ContextTypes.DEFAULT_TYPE):
         session = bot.load_session(update.effective_chat.id)
@@ -146,10 +297,17 @@ def install_facade_workflow() -> None:
             return bot.STATE_PROBLEM
 
         direction = ctx.user_data["facade_direction"]
-        group_label = f"{direction} — {anomaly}"
+        section = ctx.user_data.get("facade_section", "Bâtiment")
+        if section == "Bâtiment":
+            group_label = f"{direction} — {anomaly}"
+            location = direction
+        else:
+            group_label = f"{direction} — {section} — {anomaly}"
+            location = f"{direction} — {section}"
+
         ctx.user_data["facade_anomaly"] = anomaly
         ctx.user_data["element_type"] = group_label
-        ctx.user_data["location"] = direction
+        ctx.user_data["location"] = location
         ctx.user_data["facade_caption"] = ANOMALY_CAPTIONS[anomaly]
 
         for index, group in enumerate(session.get("groups", [])):
@@ -201,12 +359,19 @@ def install_facade_workflow() -> None:
             return original_build_report(session, lang)
 
         ordered = copy.deepcopy(session)
+        sections = ordered.get("facade_sections") or ["Bâtiment"]
+        section_order = {name: index for index, name in enumerate(sections)}
 
         def sort_key(group: dict):
-            label = group.get("element_type", "")
-            direction, _, anomaly = label.partition(" — ")
+            parts = [part.strip() for part in group.get("element_type", "").split(" — ")]
+            direction = parts[0] if parts else ""
+            if len(parts) >= 3:
+                section, anomaly = parts[1], parts[2]
+            else:
+                section, anomaly = "Bâtiment", parts[1] if len(parts) > 1 else ""
             return (
                 DIRECTION_ORDER.get(direction, 99),
+                section_order.get(section, 99),
                 ANOMALY_ORDER.get(anomaly, 99),
             )
 
@@ -221,8 +386,10 @@ def install_facade_workflow() -> None:
         return original_get_element_types(session)
 
     bot.get_element_types_for_session = get_element_types_for_session
+    bot.got_project_select = got_project_select
     bot.got_group_or_add = got_group_or_add
     bot.got_element_type = got_element_type
+    bot.got_element_id = got_element_id
     bot.got_problem = got_problem
     bot.got_element_status = got_element_status
     bot.build_report = build_report
