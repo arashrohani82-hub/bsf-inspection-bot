@@ -15,6 +15,7 @@ from certificate_fallback import install_certificate_fallback
 from certificate_template_runtime import install_original_certificate_templates
 from facade_workflow import install_facade_workflow
 from hardened_runner import install_patches
+from report_cleanup import install_report_cleanup
 from runtime_config import install_runtime_config
 
 
@@ -58,9 +59,10 @@ def main() -> None:
     install_certificate_fallback()
     install_original_certificate_templates()
     install_patches()
-    # Install last so the facade-specific direction/anomaly flow wraps the
-    # hardened generic handlers without changing parking or anchor inspections.
+    # Install the facade flow after the generic hardened handlers.
     install_facade_workflow()
+    # Install last so cleanup sees the final ordered facade report.
+    install_report_cleanup()
     app = Application.builder().token(bot.TELEGRAM_TOKEN).build()
 
     conversation = ConversationHandler(
