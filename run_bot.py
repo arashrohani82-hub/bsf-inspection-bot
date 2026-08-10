@@ -18,6 +18,7 @@ from facade_report_runtime import install_facade_report_runtime
 from facade_workflow import install_facade_workflow
 from hardened_runner import install_patches
 from high_volume_report import install_high_volume_report
+from large_report_delivery import install_large_report_delivery
 from photo_numbering_runtime import install_photo_numbering
 from project_setup_runtime import install_simple_project_setup
 from report_cleanup import install_report_cleanup
@@ -64,7 +65,6 @@ def main() -> None:
     install_certificate_fallback()
     install_original_certificate_templates()
     install_patches()
-    # Use memory-conscious report-only JPEGs before the numbering/report layers.
     install_high_volume_report()
     install_photo_numbering()
     install_simple_project_setup()
@@ -72,6 +72,8 @@ def main() -> None:
     install_facade_controls()
     install_facade_report_runtime()
     install_report_cleanup()
+    # Patch the hardened background sender last, after all report builders are final.
+    install_large_report_delivery()
     app = Application.builder().token(bot.TELEGRAM_TOKEN).build()
 
     conversation = ConversationHandler(
