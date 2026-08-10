@@ -13,6 +13,7 @@ import inspection_bot as bot
 from ai_runtime import install_ai_runtime
 from certificate_fallback import install_certificate_fallback
 from certificate_template_runtime import install_original_certificate_templates
+from facade_controls import install_facade_controls
 from facade_workflow import install_facade_workflow
 from hardened_runner import install_patches
 from project_setup_runtime import install_simple_project_setup
@@ -61,9 +62,8 @@ def main() -> None:
     install_original_certificate_templates()
     install_patches()
     install_simple_project_setup()
-    # Install the facade flow after the generic hardened handlers.
     install_facade_workflow()
-    # Install last so cleanup sees the final ordered facade report.
+    install_facade_controls()
     install_report_cleanup()
     app = Application.builder().token(bot.TELEGRAM_TOKEN).build()
 
@@ -85,6 +85,8 @@ def main() -> None:
             bot.STATE_PROJECT_SELECT: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.got_project_select)],
             bot.STATE_PHOTO: [
                 MessageHandler(filters.PHOTO, bot.got_photo),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, bot.got_photo_control),
+                CommandHandler("zone", bot.cmd_zone),
                 CommandHandler("done", bot.cmd_done),
             ],
             bot.STATE_GROUP_OR_ADD: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.got_group_or_add)],
@@ -94,14 +96,12 @@ def main() -> None:
             bot.STATE_PROBLEM: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.got_problem)],
             bot.STATE_GROUP_CAPTION_FR: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.got_group_caption_fr)],
             bot.STATE_CERTIFICATE_DECISION: [
-                MessageHandler(
-                    filters.TEXT & ~filters.COMMAND,
-                    bot.got_certificate_decision,
-                )
+                MessageHandler(filters.TEXT & ~filters.COMMAND, bot.got_certificate_decision)
             ],
         },
         fallbacks=[
             CommandHandler("cancel", bot.cmd_cancel),
+            CommandHandler("zone", bot.cmd_zone),
             CommandHandler("done", bot.cmd_done),
             CommandHandler("retry", bot.cmd_done),
             CommandHandler("remove", bot.cmd_remove_last),
@@ -112,6 +112,7 @@ def main() -> None:
     app.add_handler(conversation)
     app.add_handler(CommandHandler("projects", bot.cmd_projects))
     app.add_handler(CommandHandler("status", bot.cmd_status))
+    app.add_handler(CommandHandler("zone", bot.cmd_zone))
     app.add_handler(CommandHandler("remove", bot.cmd_remove_last))
     app.add_handler(CommandHandler("done", bot.cmd_done))
     app.add_handler(CommandHandler("retry", bot.cmd_done))
