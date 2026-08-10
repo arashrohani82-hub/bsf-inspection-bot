@@ -16,6 +16,7 @@ from certificate_template_runtime import install_original_certificate_templates
 from facade_controls import install_facade_controls
 from facade_workflow import install_facade_workflow
 from hardened_runner import install_patches
+from photo_numbering_runtime import install_photo_numbering
 from project_setup_runtime import install_simple_project_setup
 from report_cleanup import install_report_cleanup
 from runtime_config import install_runtime_config
@@ -61,6 +62,7 @@ def main() -> None:
     install_certificate_fallback()
     install_original_certificate_templates()
     install_patches()
+    install_photo_numbering()
     install_simple_project_setup()
     install_facade_workflow()
     install_facade_controls()
