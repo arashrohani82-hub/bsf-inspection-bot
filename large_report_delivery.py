@@ -1,10 +1,13 @@
 """Safe delivery path for very large facade inspections.
 
 Facade reports with hundreds of photographs can exceed the memory available to
-python-docx/Railway when assembled as one package.  This module patches the
+python-docx/Railway when assembled as one package. This module patches the
 hardened sender so large facade inspections are built and delivered in bounded
 parts while preserving the original inspection session until every part has
 been sent successfully.
+
+Figure metadata is assigned before splitting so Part 2, Part 3, etc. continue
+the exact numbering of the complete inspection instead of restarting at 1a.
 """
 
 from __future__ import annotations
@@ -27,10 +30,50 @@ def _photo_count(session: dict) -> int:
     return sum(len(group.get("photos", [])) for group in session.get("groups", []))
 
 
+def _facade_zone(label: str) -> str:
+    """Extract the physical zone from a facade group label."""
+    parts = [part.strip() for part in str(label).split(" — ") if part.strip()]
+    if not parts:
+        return "Façade"
+    if len(parts) == 1:
+        return parts[0]
+    if len(parts) == 2:
+        return parts[0]
+    return " — ".join(parts[:-1])
+
+
+def _number_complete_inspection(session: dict) -> dict:
+    """Attach stable figure number and suffix index to every facade photo.
+
+    Photos in the same physical zone share one figure number. Their letter index
+    continues across all anomaly groups and, later, across all generated parts.
+    """
+    numbered = copy.deepcopy(session)
+    zone_numbers: dict[str, int] = {}
+    zone_offsets: dict[str, int] = {}
+    next_figure = 1
+
+    for group in numbered.get("groups", []):
+        zone = _facade_zone(group.get("element_type", ""))
+        if zone not in zone_numbers:
+            zone_numbers[zone] = next_figure
+            zone_offsets[zone] = 0
+            next_figure += 1
+
+        figure_number = zone_numbers[zone]
+        for photo in group.get("photos", []):
+            photo["_figure_number"] = figure_number
+            photo["_figure_letter_index"] = zone_offsets[zone]
+            zone_offsets[zone] += 1
+
+    return numbered
+
+
 def _split_facade_session(session: dict, limit: int = MAX_PHOTOS_PER_PART) -> list[dict]:
-    """Split groups without losing order, captions, status, or zone metadata."""
+    """Split groups without losing order, captions, status, zone, or numbering."""
+    source = _number_complete_inspection(session)
     parts: list[dict] = []
-    current = copy.deepcopy(session)
+    current = copy.deepcopy(source)
     current["groups"] = []
     current_count = 0
 
@@ -39,11 +82,11 @@ def _split_facade_session(session: dict, limit: int = MAX_PHOTOS_PER_PART) -> li
         if not current["groups"]:
             return
         parts.append(current)
-        current = copy.deepcopy(session)
+        current = copy.deepcopy(source)
         current["groups"] = []
         current_count = 0
 
-    for group in session.get("groups", []):
+    for group in source.get("groups", []):
         photos = list(group.get("photos", []))
         cursor = 0
         while cursor < len(photos):
@@ -109,9 +152,8 @@ async def _send_large_facade_report(chat_id: int, session_snapshot: dict, applic
                     caption=f"🇫🇷 Rapport Word — Partie {index}/{total_parts}",
                 )
 
-            # Deliberately avoid automatic PDF generation for hundreds of photos.
-            # It duplicates memory usage and the existing PDF path is not needed
-            # to preserve the engineering Word deliverable.
+            # Avoid automatic PDF generation for hundreds of photos because it
+            # duplicates memory use. The engineering Word deliverables remain.
             await asyncio.sleep(0)
 
         current = bot.load_session(chat_id)
