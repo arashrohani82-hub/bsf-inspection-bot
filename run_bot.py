@@ -14,6 +14,7 @@ from ai_runtime import install_ai_runtime
 from certificate_fallback import install_certificate_fallback
 from certificate_template_runtime import install_original_certificate_templates
 from facade_controls import install_facade_controls
+from facade_report_runtime import install_facade_report_runtime
 from facade_workflow import install_facade_workflow
 from hardened_runner import install_patches
 from photo_numbering_runtime import install_photo_numbering
@@ -66,6 +67,9 @@ def main() -> None:
     install_simple_project_setup()
     install_facade_workflow()
     install_facade_controls()
+    # Presentation layer: combine facade observations by physical zone and
+    # summarize the anomalies recorded in that location.
+    install_facade_report_runtime()
     install_report_cleanup()
     app = Application.builder().token(bot.TELEGRAM_TOKEN).build()
 
