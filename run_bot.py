@@ -17,6 +17,7 @@ from facade_controls import install_facade_controls
 from facade_report_runtime import install_facade_report_runtime
 from facade_workflow import install_facade_workflow
 from hardened_runner import install_patches
+from high_volume_report import install_high_volume_report
 from photo_numbering_runtime import install_photo_numbering
 from project_setup_runtime import install_simple_project_setup
 from report_cleanup import install_report_cleanup
@@ -63,12 +64,12 @@ def main() -> None:
     install_certificate_fallback()
     install_original_certificate_templates()
     install_patches()
+    # Use memory-conscious report-only JPEGs before the numbering/report layers.
+    install_high_volume_report()
     install_photo_numbering()
     install_simple_project_setup()
     install_facade_workflow()
     install_facade_controls()
-    # Presentation layer: combine facade observations by physical zone and
-    # summarize the anomalies recorded in that location.
     install_facade_report_runtime()
     install_report_cleanup()
     app = Application.builder().token(bot.TELEGRAM_TOKEN).build()
