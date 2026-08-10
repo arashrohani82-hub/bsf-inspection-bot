@@ -13,6 +13,7 @@ import inspection_bot as bot
 from ai_runtime import install_ai_runtime
 from certificate_fallback import install_certificate_fallback
 from certificate_template_runtime import install_original_certificate_templates
+from continuous_figure_runtime import install_continuous_figure_runtime
 from facade_controls import install_facade_controls
 from facade_report_runtime import install_facade_report_runtime
 from facade_workflow import install_facade_workflow
@@ -67,6 +68,7 @@ def main() -> None:
     install_patches()
     install_high_volume_report()
     install_photo_numbering()
+    install_continuous_figure_runtime()
     install_simple_project_setup()
     install_facade_workflow()
     install_facade_controls()
