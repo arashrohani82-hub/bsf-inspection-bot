@@ -15,10 +15,11 @@ import inspection_bot as bot
 log = logging.getLogger(__name__)
 
 NO_ANOMALY_LABEL = "Aucune anomalie visible"
+OFFICE_UNCLASSIFIED = "À classer – import bureau"
 
 
 def _facade_issues(groups: list[dict]) -> list[str]:
-    """Treat every recorded facade anomaly as an issue, regardless of status."""
+    """Treat recorded facade anomalies as issues, including zone-grouped reports."""
     results: list[str] = []
     for group in groups:
         label = str(group.get("element_type", "")).strip()
@@ -27,10 +28,20 @@ def _facade_issues(groups: list[dict]) -> list[str]:
             for photo in group.get("photos", [])
         }
 
-        is_facade_group = label.startswith("Façade ")
-        has_recorded_anomaly = is_facade_group and NO_ANOMALY_LABEL not in label
+        recorded = [
+            str(item)
+            for item in group.get("facade_anomalies", [])
+            if str(item) not in {NO_ANOMALY_LABEL, OFFICE_UNCLASSIFIED}
+        ]
+        if group.get("facade_anomalies") is not None:
+            has_recorded_anomaly = bool(recorded)
+        else:
+            is_facade_group = label.startswith("Façade ")
+            has_recorded_anomaly = is_facade_group and NO_ANOMALY_LABEL not in label
+
         has_nonacceptable_status = any(
-            "Acceptable" not in status for status in statuses
+            "Acceptable" not in status and "À classer" not in status
+            for status in statuses
         )
 
         if not has_recorded_anomaly and not has_nonacceptable_status:
@@ -43,7 +54,6 @@ def _facade_issues(groups: list[dict]) -> list[str]:
 
 
 def _renumber_facade_headings(doc: Document) -> bool:
-    """Correct the skipped section number in the generated facade DOCX."""
     changed = False
     for paragraph in doc.paragraphs:
         text = paragraph.text.strip()
@@ -64,12 +74,10 @@ def _renumber_facade_headings(doc: Document) -> bool:
 
 
 def _table_contains_picture(table_element) -> bool:
-    """Return True when a Word table contains at least one embedded picture."""
     return bool(table_element.xpath(".//a:blip"))
 
 
 def _insert_page_break_before_first_photo_table(doc: Document) -> bool:
-    """Start the photo appendix on a fresh page below the recurring header."""
     body = doc._body._body
     first_photo_table = None
     for child in body.iterchildren():
@@ -82,7 +90,6 @@ def _insert_page_break_before_first_photo_table(doc: Document) -> bool:
 
     previous = first_photo_table.getprevious()
     if previous is not None and previous.tag == qn("w:p"):
-        # Avoid adding duplicate page breaks when a report is processed twice.
         if previous.xpath(".//w:br[@w:type='page']") or previous.xpath(
             ".//w:pageBreakBefore"
         ):
@@ -98,7 +105,6 @@ def _insert_page_break_before_first_photo_table(doc: Document) -> bool:
 
 
 def _protect_header_clearance(doc: Document) -> bool:
-    """Keep body content below the BSF header on every generated page."""
     changed = False
     for section in doc.sections:
         if section.top_margin is None or section.top_margin < Inches(1.15):
