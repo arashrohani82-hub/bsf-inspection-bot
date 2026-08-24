@@ -1,4 +1,9 @@
-"""Application entrypoint with global recovery commands."""
+"""Application entrypoint with global recovery commands and Railway health endpoint."""
+
+import json
+import os
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from telegram import Update
 from telegram.ext import (
@@ -24,6 +29,38 @@ from photo_numbering_runtime import install_photo_numbering
 from project_setup_runtime import install_simple_project_setup
 from report_cleanup import install_report_cleanup
 from runtime_config import install_runtime_config
+
+
+class HealthHandler(BaseHTTPRequestHandler):
+    """Minimal HTTP endpoint used by Railway and Metra Command Center."""
+
+    def do_GET(self):
+        if self.path.split("?", 1)[0] not in ("/", "/status", "/health"):
+            self.send_response(404)
+            self.end_headers()
+            return
+        payload = json.dumps(
+            {
+                "status": "ok",
+                "service": "bsf-inspection-bot",
+                "telegram": "polling",
+            }
+        ).encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def log_message(self, format, *args):
+        return
+
+
+def start_health_server() -> None:
+    port = int(os.environ.get("PORT", "8080"))
+    server = ThreadingHTTPServer(("0.0.0.0", port), HealthHandler)
+    bot.log.info("Health server listening on port %s", port)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
 
 
 def install_inspection_type_compatibility() -> None:
@@ -76,6 +113,7 @@ def main() -> None:
     install_report_cleanup()
     # Patch the hardened background sender last, after all report builders are final.
     install_large_report_delivery()
+    start_health_server()
     app = Application.builder().token(bot.TELEGRAM_TOKEN).build()
 
     conversation = ConversationHandler(
