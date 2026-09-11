@@ -5,7 +5,7 @@ import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from telegram import Update
+from telegram import BotCommand, MenuButtonCommands, Update
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -65,6 +65,14 @@ def start_health_server() -> None:
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
 
+async def configure_telegram_menu(application: Application) -> None:
+    """Expose a tappable Start action so users never need to type commands."""
+    await application.bot.set_my_commands(
+        [BotCommand("start", "Start / New inspection")]
+    )
+    await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+
+
 def install_inspection_type_compatibility() -> None:
     """Normalize legacy project JSON inspection-type records to display labels."""
     original_get_inspection_types = bot.get_inspection_types
@@ -118,10 +126,19 @@ def main() -> None:
     # Patch the hardened background sender last, after all report builders are final.
     install_large_report_delivery()
     start_health_server()
-    app = Application.builder().token(bot.TELEGRAM_TOKEN).build()
+    app = (
+        Application.builder()
+        .token(bot.TELEGRAM_TOKEN)
+        .post_init(configure_telegram_menu)
+        .build()
+    )
 
     conversation = ConversationHandler(
-        entry_points=[CommandHandler("start", bot.cmd_start)],
+        entry_points=[
+            CommandHandler("start", bot.cmd_start),
+            MessageHandler(filters.Regex(r"^🏠 New inspection$"), bot.cmd_start),
+            MessageHandler(filters.Regex(r"^🔁 Retry report$"), bot.cmd_done),
+        ],
         states={
             bot.STATE_COMPANY: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.got_company)],
             bot.STATE_METRA_SERVICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.got_metra_service)],

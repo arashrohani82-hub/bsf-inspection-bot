@@ -10,6 +10,11 @@ FACADE_DIRECTIONS = [
     ["Façade est", "Façade ouest"],
 ]
 
+GENERIC_PHOTO_CONTROLS = [
+    ["🗑 Remove last photo", "✅ Finish inspection"],
+    ["🏠 New inspection"],
+]
+
 
 def install_facade_controls() -> None:
     async def _ask_zone(update, ctx):
@@ -26,18 +31,39 @@ def install_facade_controls() -> None:
 
     async def got_photo_control(update, ctx: ContextTypes.DEFAULT_TYPE):
         session = bot.load_session(update.effective_chat.id)
-        if bot.report_profiles.profile_key(session.get("inspection_type")) != "facade":
-            await update.message.reply_text("📸 Envoyez une photo ou utilisez /done.")
-            return bot.STATE_PHOTO
-
         text = update.message.text.strip()
-        if text == "📍 Change zone":
-            return await _ask_zone(update, ctx)
+        if text == "🏠 New inspection":
+            return await bot.cmd_start(update, ctx)
+        if text == "🗑 Remove last photo":
+            await bot.cmd_remove_last(update, ctx)
+            await update.message.reply_text(
+                "📸 Send the next photo, or use the buttons below.",
+                reply_markup=ReplyKeyboardMarkup(
+                    GENERIC_PHOTO_CONTROLS,
+                    resize_keyboard=True,
+                    is_persistent=True,
+                ),
+            )
+            return bot.STATE_PHOTO
         if text == "✅ Finish inspection":
             return await bot.cmd_done(update, ctx)
 
+        if bot.report_profiles.profile_key(session.get("inspection_type")) != "facade":
+            await update.message.reply_text(
+                "📸 Send a photo, or use one of the buttons below.",
+                reply_markup=ReplyKeyboardMarkup(
+                    GENERIC_PHOTO_CONTROLS,
+                    resize_keyboard=True,
+                    is_persistent=True,
+                ),
+            )
+            return bot.STATE_PHOTO
+
+        if text == "📍 Change zone":
+            return await _ask_zone(update, ctx)
+
         await update.message.reply_text(
-            "📸 Envoyez une photo, utilisez 📍 Change zone, ou /done pour terminer."
+            "📸 Envoyez une photo, utilisez 📍 Change zone, ou ✅ Finish inspection."
         )
         return bot.STATE_PHOTO
 

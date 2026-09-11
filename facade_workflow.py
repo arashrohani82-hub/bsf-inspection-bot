@@ -19,7 +19,8 @@ FACADE_DIRECTIONS = [
 SECTION_SETUP = [
     ["🏢 Bâtiment sans sous-sections"],
     ["🏨 Hôtel + Résidentiel"],
-    ["✏️ Définir mes sections"],
+    ["🏬 Commercial + Résidentiel"],
+    ["🏙 Tour + Basilaire"],
 ]
 
 MODE_SETUP = [
@@ -93,8 +94,12 @@ def _group_label(direction: str, section: str, anomaly: str) -> str:
 
 def _field_ready_keyboard() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        [["📍 Change zone", "✅ Finish inspection"]],
+        [
+            ["📍 Change zone", "✅ Finish inspection"],
+            ["🗑 Remove last photo", "🏠 New inspection"],
+        ],
         resize_keyboard=True,
+        is_persistent=True,
     )
 
 
@@ -192,7 +197,8 @@ def install_facade_workflow() -> None:
         count = len(group["photos"])
         await update.message.reply_text(
             f"✅ {count} photo(s) enregistrée(s) dans {_zone_label(direction, section)}.\n"
-            "Envoyez la suivante, /zone pour changer de zone, ou /done pour terminer.",
+            "Envoyez la suivante ou utilisez les boutons ci-dessous.",
+            reply_markup=_field_ready_keyboard(),
         )
         return bot.STATE_PHOTO
 
@@ -219,7 +225,7 @@ def install_facade_workflow() -> None:
             bot.save_session(update.effective_chat.id, session)
             await update.message.reply_text(
                 f"✅ Zone active : {_zone_label(direction, sections[0])}\n\n📸 Envoyez une photo.",
-                reply_markup=_field_ready_keyboard() if session.get("facade_mode") == "field" else ReplyKeyboardRemove(),
+                reply_markup=_field_ready_keyboard(),
             )
             return bot.STATE_PHOTO
         ctx.user_data["facade_stage"] = "select_section"
@@ -241,13 +247,10 @@ def install_facade_workflow() -> None:
                 sections = ["Bâtiment"]
             elif choice == "🏨 Hôtel + Résidentiel":
                 sections = ["Hôtel", "Résidentiel"]
-            elif choice == "✏️ Définir mes sections":
-                ctx.user_data["facade_stage"] = "custom_sections"
-                await update.message.reply_text(
-                    "Écrivez les sections séparées par des virgules. Exemple : Hôtel, Résidentiel, Basilaire",
-                    reply_markup=ReplyKeyboardRemove(),
-                )
-                return bot.STATE_ELEMENT_ID
+            elif choice == "🏬 Commercial + Résidentiel":
+                sections = ["Commercial", "Résidentiel"]
+            elif choice == "🏙 Tour + Basilaire":
+                sections = ["Tour", "Basilaire"]
             else:
                 await update.message.reply_text("Veuillez choisir une option.", reply_markup=ReplyKeyboardMarkup(SECTION_SETUP, resize_keyboard=True))
                 return bot.STATE_ELEMENT_ID
@@ -287,7 +290,7 @@ def install_facade_workflow() -> None:
             ctx.user_data.pop("facade_stage", None)
             await update.message.reply_text(
                 f"✅ Zone active : {_zone_label(direction, choice)}\n\n📸 Envoyez une photo.",
-                reply_markup=_field_ready_keyboard() if session.get("facade_mode") == "field" else ReplyKeyboardRemove(),
+                reply_markup=_field_ready_keyboard(),
             )
             return bot.STATE_PHOTO
 

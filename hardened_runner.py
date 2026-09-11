@@ -77,7 +77,27 @@ def _safe_project_slug(value: str) -> str:
 
 _original_cmd_start = bot.cmd_start
 _original_got_element_status = bot.got_element_status
+_original_got_project_select = bot.got_project_select
 _original_cmd_status = bot.cmd_status
+
+PHOTO_CONTROL_BUTTONS = [["🗑 Remove last photo", "✅ Finish inspection"], ["🏠 New inspection"]]
+NEW_INSPECTION_BUTTONS = [["🏠 New inspection"]]
+
+
+def photo_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        PHOTO_CONTROL_BUTTONS,
+        resize_keyboard=True,
+        is_persistent=True,
+    )
+
+
+def new_inspection_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        NEW_INSPECTION_BUTTONS,
+        resize_keyboard=True,
+        is_persistent=True,
+    )
 
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -102,11 +122,21 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown",
         reply_markup=ReplyKeyboardMarkup(
             [["🔷 Metra Consultation"], ["🟠 BSF Inspections"]],
-            one_time_keyboard=True,
             resize_keyboard=True,
+            is_persistent=True,
         ),
     )
     return bot.STATE_COMPANY
+
+
+async def got_project_select(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    result = await _original_got_project_select(update, ctx)
+    if result == bot.STATE_PHOTO:
+        await update.message.reply_text(
+            "📸 Send a photo, or use the buttons below.",
+            reply_markup=photo_keyboard(),
+        )
+    return result
 
 
 async def got_main_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -261,7 +291,13 @@ async def got_element_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     # and now receives the correct selected index from got_group_or_add.
     idx = ctx.user_data.get("add_to_group_idx")
     if idx is not None:
-        return await _original_got_element_status(update, ctx)
+        result = await _original_got_element_status(update, ctx)
+        if result == bot.STATE_PHOTO:
+            await update.message.reply_text(
+                "📸 Send the next photo, or use the buttons below.",
+                reply_markup=photo_keyboard(),
+            )
+        return result
 
     chat_id = update.effective_chat.id
     session = bot.load_session(chat_id)
@@ -292,18 +328,58 @@ async def got_element_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     auto_caption = bot.CAPTION_MAP.get(
         (inspection_type, element_type), ai.get("caption_fr", "Observation à compléter")
     )
-    options = [["✅ " + auto_caption]]
+    options = [["✅ Use standard caption"]]
     ai_caption = ai.get("caption_fr", "")
     if ai_caption and ai_caption != auto_caption:
-        options.append(["✅ " + ai_caption])
-    options.append(["✏️ Write my own"])
+        options.append(["🤖 Use AI caption"])
     ctx.user_data["auto_caption"] = auto_caption
 
     await update.message.reply_text(
-        "Choose caption or write your own:",
+        f"Choose the caption:\n\nStandard: {auto_caption}\nAI: {ai_caption or 'Unavailable'}",
         reply_markup=ReplyKeyboardMarkup(options, one_time_keyboard=True, resize_keyboard=True),
     )
     return bot.STATE_GROUP_CAPTION_FR
+
+
+async def got_group_caption_fr(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    choice = update.message.text.strip()
+    ai = ctx.user_data.get("pending_ai", {})
+    if choice == "✅ Use standard caption":
+        caption_fr = ctx.user_data.get("auto_caption", "Observation à compléter")
+    elif choice == "🤖 Use AI caption":
+        caption_fr = ai.get("caption_fr", "Observation à compléter")
+    else:
+        options = [["✅ Use standard caption"]]
+        if ai.get("caption_fr") and ai.get("caption_fr") != ctx.user_data.get("auto_caption"):
+            options.append(["🤖 Use AI caption"])
+        await update.message.reply_text(
+            "⚠️ Please select a caption using a button.",
+            reply_markup=ReplyKeyboardMarkup(options, resize_keyboard=True),
+        )
+        return bot.STATE_GROUP_CAPTION_FR
+
+    chat_id = update.effective_chat.id
+    session = bot.load_session(chat_id)
+    session.setdefault("groups", []).append(
+        {
+            "element_type": ctx.user_data.get("element_type", ""),
+            "caption_fr": caption_fr,
+            "caption_en": ai.get("caption_en", ""),
+            "severity": ai.get("severity", "ok"),
+            "photos": [
+                {
+                    "path": ctx.user_data["pending_photo_path"],
+                    "status": ctx.user_data.get("pending_status", "✅ Acceptable"),
+                }
+            ],
+        }
+    )
+    bot.save_session(chat_id, session)
+    await update.message.reply_text(
+        f"✅ Group {len(session['groups'])} created.\n\n📸 Send the next photo, or use the buttons below.",
+        reply_markup=photo_keyboard(),
+    )
+    return bot.STATE_PHOTO
 
 
 async def _send_report(chat_id: int, session_snapshot: dict, application) -> None:
@@ -379,12 +455,11 @@ async def _send_report(chat_id: int, session_snapshot: dict, application) -> Non
                 "inspection_id"
             ):
                 bot.clear_session(chat_id)
-            final_message = (
-                "✅ Rapport envoyé!\nType /start for a new inspection."
-            )
+            final_message = "✅ Rapport envoyé!\nTap the button below for a new inspection."
         await application.bot.send_message(
             chat_id=chat_id,
             text=final_message,
+            reply_markup=new_inspection_keyboard(),
         )
     except Exception as exc:
         log.exception("Report generation failed for chat %s", chat_id)
@@ -394,7 +469,12 @@ async def _send_report(chat_id: int, session_snapshot: dict, application) -> Non
         bot.save_session(chat_id, current)
         await application.bot.send_message(
             chat_id=chat_id,
-            text="❌ Report generation failed. Your inspection was preserved. Use /done to retry.",
+            text="❌ Report generation failed. Your inspection was preserved. Tap Retry report.",
+            reply_markup=ReplyKeyboardMarkup(
+                [["🔁 Retry report"], ["🏠 New inspection"]],
+                resize_keyboard=True,
+                is_persistent=True,
+            ),
         )
 
 
@@ -438,7 +518,7 @@ async def cmd_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     session = bot.load_session(chat_id)
     groups = session.get("groups", [])
     if not groups:
-        await update.message.reply_text("⚠️ No photos yet.")
+        await update.message.reply_text("⚠️ No photos yet.", reply_markup=photo_keyboard())
         return bot.STATE_PHOTO
     if session.get("report_status") == "processing":
         await update.message.reply_text(
@@ -517,7 +597,14 @@ async def cmd_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if status == "processing":
         await update.message.reply_text("⏳ Report generation is in progress.")
     elif status == "failed":
-        await update.message.reply_text("⚠️ Last report attempt failed. Your data is preserved; use /done to retry.")
+        await update.message.reply_text(
+            "⚠️ Last report attempt failed. Your data is preserved; tap Retry report.",
+            reply_markup=ReplyKeyboardMarkup(
+                [["🔁 Retry report"], ["🏠 New inspection"]],
+                resize_keyboard=True,
+                is_persistent=True,
+            ),
+        )
 
 
 def install_patches() -> None:
@@ -528,9 +615,11 @@ def install_patches() -> None:
 
     bot.cmd_start = cmd_start
     bot.got_main_menu = got_main_menu
+    bot.got_project_select = got_project_select
     bot.got_photo = got_photo
     bot.got_group_or_add = got_group_or_add
     bot.got_element_status = got_element_status
+    bot.got_group_caption_fr = got_group_caption_fr
     bot.got_certificate_decision = got_certificate_decision
     bot.cmd_done = cmd_done
     bot.cmd_status = cmd_status

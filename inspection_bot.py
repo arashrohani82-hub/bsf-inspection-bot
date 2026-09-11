@@ -924,7 +924,7 @@ async def got_element_status(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         save_session(chat_id, session)
         n = len(session["groups"][idx]["photos"])
         await update.message.reply_text(
-            "✅ Added (" + str(n) + " photos).\n\n📸 Send next photo or /done.",
+            "✅ Added (" + str(n) + " photos).\n\n📸 Send the next photo or tap Finish inspection.",
             reply_markup=ReplyKeyboardRemove())
         ctx.user_data.pop("add_to_group_idx", None)
         return STATE_PHOTO
@@ -1003,14 +1003,14 @@ async def cmd_remove_last(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         last_group["photos"] = photos
         save_session(chat_id, session)
         await update.message.reply_text(
-            "Removed. Group now has " + str(len(photos)) + " photo(s).\n\nSend next photo or /done.",
+            "Removed. Group now has " + str(len(photos)) + " photo(s).\n\nSend the next photo or tap Finish inspection.",
             reply_markup=ReplyKeyboardRemove())
     elif len(photos) == 1:
         groups.pop()
         session["groups"] = groups
         save_session(chat_id, session)
         await update.message.reply_text(
-            "Removed. " + str(len(groups)) + " group(s) remaining.\n\nSend next photo or /done.",
+            "Removed. " + str(len(groups)) + " group(s) remaining.\n\nSend the next photo or tap Finish inspection.",
             reply_markup=ReplyKeyboardRemove())
     else:
         await update.message.reply_text("No photos to remove.")

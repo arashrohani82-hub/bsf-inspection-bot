@@ -17,6 +17,8 @@ import copy
 import logging
 from pathlib import Path
 
+from telegram import ReplyKeyboardMarkup
+
 import inspection_bot as bot
 import hardened_runner as hard
 
@@ -166,6 +168,11 @@ async def _send_large_facade_report(chat_id: int, session_snapshot: dict, applic
                 f"✅ Rapport complet envoyé en {total_parts} parties "
                 f"({total_photos} photos)."
             ),
+            reply_markup=ReplyKeyboardMarkup(
+                [["🏠 New inspection"]],
+                resize_keyboard=True,
+                is_persistent=True,
+            ),
         )
 
     except Exception as exc:
@@ -178,7 +185,12 @@ async def _send_large_facade_report(chat_id: int, session_snapshot: dict, applic
             chat_id=chat_id,
             text=(
                 "❌ La génération du rapport volumineux a échoué. "
-                "L’inspection complète est conservée. Utilisez /done pour réessayer."
+                "L’inspection complète est conservée. Appuyez sur Retry report."
+            ),
+            reply_markup=ReplyKeyboardMarkup(
+                [["🔁 Retry report"], ["🏠 New inspection"]],
+                resize_keyboard=True,
+                is_persistent=True,
             ),
         )
 

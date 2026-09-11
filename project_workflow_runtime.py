@@ -19,73 +19,80 @@ METRA_SERVICES = [
 LOI122_TYPES = [["Façades – Loi 122"], ["Stationnement – Loi 122"]]
 ANCHOR_TYPES = [["Ancrages – Inspection annuelle"], ["Ancrages – Inspection 5 ans"]]
 ACTION_BUTTONS = [["📁 Define new project"], ["📝 Write a report"]]
+PHOTO_CONTROL_BUTTONS = [["🗑 Remove last photo", "✅ Finish inspection"], ["🏠 New inspection"]]
 YES_NO_UNKNOWN = [["✅ Oui", "❌ Non"], ["❓ Inconnu", "⏭ Passer"]]
 SKIP = [["⏭ Passer"]]
 
+CLIENT_OPTIONS = [["🏢 Syndicat", "🏠 Propriétaire"], ["🧑‍💼 Gestionnaire", "❓ À confirmer"]]
+CONTACT_OPTIONS = [["🧑‍💼 Gestionnaire", "👤 Administrateur"], ["🛠 Surintendant", "❓ À confirmer"]]
+YEAR_OPTIONS = [["Avant 1980", "1980–1999"], ["2000–2009", "2010–2019"], ["2020 ou après", "❓ Inconnu"]]
+STOREY_OPTIONS = [["1–3 étages", "4–6 étages"], ["7–12 étages", "13 étages ou plus"], ["❓ Inconnu"]]
+DOCUMENT_OPTIONS = [["📐 Plans", "📄 Rapports antérieurs"], ["📚 Plans + rapports", "🚫 Aucun document"], ["❓ À confirmer"]]
+
 
 COMMON_QUESTIONS = [
-    ("client", "Client / syndicat", "Nom du client ou du syndicat de copropriété?", None),
-    ("contact", "Personne-ressource", "Nom et coordonnées de la personne-ressource?", None),
+    ("client", "Client / syndicat", "Quel est le type de client?", CLIENT_OPTIONS),
+    ("contact", "Personne-ressource", "Quel est le rôle de la personne-ressource?", CONTACT_OPTIONS),
     ("building_use", "Usage", "Usage principal du bâtiment?", [["Résidentiel", "Commercial"], ["Mixte", "⏭ Passer"]]),
-    ("construction_year", "Année de construction", "Année de construction approximative?", None),
-    ("storeys", "Étages", "Nombre d’étages hors sol?", None),
-    ("documents", "Documents disponibles", "Quels documents sont disponibles (plans, rapports, factures, registre, etc.)?", None),
+    ("construction_year", "Année de construction", "Période de construction approximative?", YEAR_OPTIONS),
+    ("storeys", "Étages", "Nombre d’étages hors sol?", STOREY_OPTIONS),
+    ("documents", "Documents disponibles", "Quels documents principaux sont disponibles?", DOCUMENT_OPTIONS),
 ]
 
 CHECKLISTS = {
     "facade": COMMON_QUESTIONS + [
-        ("facade_materials", "Revêtements", "Principaux matériaux des façades?", None),
-        ("last_detailed_inspection", "Inspection antérieure", "Date et auteur de la dernière inspection détaillée?", None),
-        ("repairs_since", "Travaux antérieurs", "Réparations réalisées depuis la dernière inspection?", None),
-        ("known_conditions", "Anomalies connues", "Déficiences, chutes de matériaux ou infiltrations déjà signalées?", None),
+        ("facade_materials", "Revêtements", "Principaux matériaux des façades?", [["🧱 Maçonnerie", "🏗 Béton"], ["🪟 Mur-rideau", "🏢 Revêtement léger"], ["🔀 Système mixte", "❓ Inconnu"]]),
+        ("last_detailed_inspection", "Inspection antérieure", "Quand a eu lieu la dernière inspection détaillée?", [["Moins de 1 an", "1–3 ans"], ["3–5 ans", "Plus de 5 ans"], ["🚫 Aucune", "❓ Inconnu"]]),
+        ("repairs_since", "Travaux antérieurs", "Réparations depuis la dernière inspection?", [["🚫 Aucune", "🔧 Localisées"], ["🏗 Majeures", "⏳ En cours"], ["❓ Inconnu"]]),
+        ("known_conditions", "Anomalies connues", "Quelle anomalie est déjà signalée?", [["✅ Aucune connue", "🧱 Fissuration"], ["💧 Infiltration", "⚠️ Chute de matériau"], ["🔀 Plusieurs anomalies", "❓ Inconnu"]]),
         ("dangerous_condition", "Condition dangereuse", "Une condition dangereuse est-elle présentement connue?", YES_NO_UNKNOWN),
-        ("access_method", "Méthode d’accès", "Accès prévu: sol, toiture, nacelle, plateforme, drone ou ouvertures exploratoires?", None),
-        ("public_exposure", "Exposition du public", "Décrire les trottoirs, entrées, terrasses ou zones publiques au pied des façades.", None),
-        ("inspection_scope", "Portée", "Inspection quinquennale complète, suivi de travaux ou autre portée?", None),
+        ("access_method", "Méthode d’accès", "Quelle méthode d’accès est prévue?", [["🚶 Depuis le sol", "🏠 Depuis la toiture"], ["🚜 Nacelle", "🪢 Plateforme suspendue"], ["🚁 Drone", "🔍 Ouvertures exploratoires"]]),
+        ("public_exposure", "Exposition du public", "Niveau d’exposition au pied des façades?", [["🟢 Faible", "🟡 Moyenne"], ["🔴 Élevée", "❓ À confirmer"]]),
+        ("inspection_scope", "Portée", "Quelle est la portée principale?", [["📋 Inspection quinquennale", "🔧 Suivi de travaux"], ["🚨 Vérification urgente", "❓ À confirmer"]]),
     ],
     "parking": COMMON_QUESTIONS + [
-        ("parking_levels", "Niveaux", "Nombre de niveaux de stationnement?", None),
-        ("structural_system", "Système structural", "Type de structure (béton coulé, préfabriqué, dalle post-tendue, acier, etc.)?", None),
-        ("environment", "Exposition", "Stationnement intérieur, extérieur ou partiellement exposé?", None),
-        ("last_detailed_inspection", "Inspection antérieure", "Date et auteur de la dernière vérification approfondie?", None),
+        ("parking_levels", "Niveaux", "Nombre de niveaux de stationnement?", [["1 niveau", "2 niveaux"], ["3–5 niveaux", "6 niveaux ou plus"], ["❓ Inconnu"]]),
+        ("structural_system", "Système structural", "Quel est le système structural principal?", [["🏗 Béton coulé", "🧩 Béton préfabriqué"], ["↔️ Dalle post-tendue", "🔩 Acier"], ["🔀 Mixte", "❓ Inconnu"]]),
+        ("environment", "Exposition", "Type d’exposition du stationnement?", [["🏠 Intérieur", "☀️ Extérieur"], ["🔀 Partiellement exposé", "❓ Inconnu"]]),
+        ("last_detailed_inspection", "Inspection antérieure", "Quand a eu lieu la dernière vérification approfondie?", [["Moins de 1 an", "1–3 ans"], ["3–5 ans", "Plus de 5 ans"], ["🚫 Aucune", "❓ Inconnu"]]),
         ("annual_sheets", "Fiches annuelles", "Les fiches de vérification annuelle sont-elles disponibles?", YES_NO_UNKNOWN),
-        ("known_conditions", "Anomalies connues", "Fissures, délamination, éclatement, corrosion, infiltration ou drainage déficient connus?", None),
+        ("known_conditions", "Anomalies connues", "Quelle condition est déjà connue?", [["✅ Aucune", "〰️ Fissuration"], ["🧱 Délamination / éclatement", "🧲 Corrosion"], ["💧 Infiltration / drainage", "🔀 Plusieurs"]]),
         ("temporary_measures", "Mesures temporaires", "Présence d’étaiement, fermeture ou mesure de sécurité temporaire?", YES_NO_UNKNOWN),
-        ("repairs_since", "Travaux antérieurs", "Réparations réalisées depuis la dernière inspection?", None),
+        ("repairs_since", "Travaux antérieurs", "Réparations depuis la dernière inspection?", [["🚫 Aucune", "🔧 Localisées"], ["🏗 Majeures", "⏳ En cours"], ["❓ Inconnu"]]),
     ],
     "anchor_annual": COMMON_QUESTIONS + [
-        ("system_types", "Systèmes", "Systèmes présents: ancrages, lignes de vie, bossoirs, socles ou rails?", None),
-        ("component_count", "Quantité", "Nombre approximatif de chaque composante?", None),
-        ("roof_access", "Accès toiture", "Décrire l’accès sécuritaire à la toiture.", None),
+        ("system_types", "Systèmes", "Quel système principal est présent?", [["⚓ Ancrages", "➖ Lignes de vie"], ["🏗 Bossoirs / socles", "🛤 Rails"], ["🔀 Système mixte", "❓ Inconnu"]]),
+        ("component_count", "Quantité", "Nombre approximatif de composantes?", [["1–10", "11–25"], ["26–50", "51–100"], ["Plus de 100", "❓ Inconnu"]]),
+        ("roof_access", "Accès toiture", "Quel est l’accès principal à la toiture?", [["🚪 Escalier intérieur", "🪜 Échelle fixe"], ["🔐 Trappe verrouillée", "🚜 Nacelle requise"], ["❓ À confirmer"]]),
         ("layout_available", "Plan de localisation", "Un plan numéroté des équipements est-il disponible?", YES_NO_UNKNOWN),
-        ("manufacturer", "Fabricant", "Fabricant, modèle et année d’installation, si connus?", None),
-        ("last_inspection", "Inspection antérieure", "Date du dernier rapport annuel et du dernier rapport quinquennal?", None),
-        ("known_repairs", "Réparations", "Réparations, modifications ou équipements hors service connus?", None),
+        ("manufacturer", "Fabricant", "Information du fabricant disponible?", [["✅ Plaque lisible", "📄 Dans les plans"], ["❌ Non disponible", "❓ À confirmer"]]),
+        ("last_inspection", "Inspection antérieure", "Quand a eu lieu la dernière inspection?", [["Moins de 1 an", "1–3 ans"], ["3–5 ans", "Plus de 5 ans"], ["🚫 Aucune", "❓ Inconnu"]]),
+        ("known_repairs", "Réparations", "État connu des équipements?", [["✅ Aucun problème", "🔧 Réparations connues"], ["⛔ Hors service", "🔀 Modifications"], ["❓ Inconnu"]]),
     ],
     "anchor_5year": COMMON_QUESTIONS + [
-        ("system_types", "Systèmes", "Systèmes présents: ancrages, lignes de vie, bossoirs, socles ou rails?", None),
-        ("component_count", "Quantité", "Nombre approximatif de chaque composante?", None),
-        ("roof_access", "Accès toiture", "Décrire l’accès sécuritaire à la toiture.", None),
+        ("system_types", "Systèmes", "Quel système principal est présent?", [["⚓ Ancrages", "➖ Lignes de vie"], ["🏗 Bossoirs / socles", "🛤 Rails"], ["🔀 Système mixte", "❓ Inconnu"]]),
+        ("component_count", "Quantité", "Nombre approximatif de composantes?", [["1–10", "11–25"], ["26–50", "51–100"], ["Plus de 100", "❓ Inconnu"]]),
+        ("roof_access", "Accès toiture", "Quel est l’accès principal à la toiture?", [["🚪 Escalier intérieur", "🪜 Échelle fixe"], ["🔐 Trappe verrouillée", "🚜 Nacelle requise"], ["❓ À confirmer"]]),
         ("layout_available", "Plan de localisation", "Un plan numéroté des équipements est-il disponible?", YES_NO_UNKNOWN),
-        ("manufacturer", "Fabricant", "Fabricant, modèle et année d’installation, si connus?", None),
+        ("manufacturer", "Fabricant", "Information du fabricant disponible?", [["✅ Plaque lisible", "📄 Dans les plans"], ["❌ Non disponible", "❓ À confirmer"]]),
         ("previous_tests", "Essais antérieurs", "Rapports d’essais de traction/charge et valeurs obtenues disponibles?", YES_NO_UNKNOWN),
-        ("test_method", "Méthode d’essai", "Méthode, charge cible et équipement d’essai prévus?", None),
-        ("known_repairs", "Réparations", "Réparations, modifications ou équipements hors service connus?", None),
+        ("test_method", "Méthode d’essai", "Quelle méthode d’essai est prévue?", [["↔️ Traction", "⬇️ Charge verticale"], ["🔀 Méthode combinée", "📄 Selon rapport antérieur"], ["❓ À confirmer"]]),
+        ("known_repairs", "Réparations", "État connu des équipements?", [["✅ Aucun problème", "🔧 Réparations connues"], ["⛔ Hors service", "🔀 Modifications"], ["❓ Inconnu"]]),
     ],
     "loi16": COMMON_QUESTIONS + [
         ("divided_coownership", "Copropriété divise", "Confirmer qu’il s’agit d’une copropriété divise.", YES_NO_UNKNOWN),
-        ("units", "Unités", "Nombre d’unités privatives?", None),
-        ("buildings", "Bâtiments", "Nombre de bâtiments couverts par le syndicat?", None),
+        ("units", "Unités", "Nombre d’unités privatives?", [["1–8", "9–20"], ["21–50", "51–100"], ["Plus de 100", "❓ Inconnu"]]),
+        ("buildings", "Bâtiments", "Nombre de bâtiments couverts?", [["1 bâtiment", "2 bâtiments"], ["3–5 bâtiments", "Plus de 5"], ["❓ Inconnu"]]),
         ("declaration", "Déclaration de copropriété", "La déclaration de copropriété et ses modifications sont-elles disponibles?", YES_NO_UNKNOWN),
-        ("common_parts", "Parties communes", "Responsabilités particulières ou parties communes à usage restreint à considérer?", None),
-        ("roof", "Toiture", "Type, âge approximatif et derniers travaux de toiture?", None),
-        ("envelope", "Enveloppe", "Revêtements, fenêtres/balcons et répartition des responsabilités?", None),
-        ("parking_elevator", "Équipements majeurs", "Stationnement étagé, ascenseur ou autres équipements majeurs présents?", None),
-        ("mechanical", "Mécanique", "Principaux systèmes communs de plomberie, chauffage, ventilation et climatisation?", None),
-        ("major_repairs", "Travaux majeurs", "Travaux majeurs réalisés ou prévus et leurs coûts, si connus?", None),
-        ("claims", "Sinistres", "Sinistres, infiltrations ou réclamations importants connus?", None),
-        ("reserve_balance", "Solde du fonds", "Solde actuel du fonds de prévoyance?", None),
-        ("annual_contribution", "Contribution annuelle", "Contribution annuelle actuelle au fonds?", None),
+        ("common_parts", "Parties communes", "Y a-t-il des parties communes à usage restreint?", YES_NO_UNKNOWN),
+        ("roof", "Toiture", "État apparent / âge connu de la toiture?", [["🟢 Récente / bon état", "🟡 Mi-vie utile"], ["🔴 Fin de vie / déficiente", "❓ Inconnu"]]),
+        ("envelope", "Enveloppe", "État apparent de l’enveloppe?", [["🟢 Bon", "🟡 Moyen"], ["🔴 Déficient", "🔀 Variable"], ["❓ Inconnu"]]),
+        ("parking_elevator", "Équipements majeurs", "Quels équipements majeurs sont présents?", [["🅿️ Stationnement", "🛗 Ascenseur"], ["🅿️ + 🛗 Les deux", "🚫 Aucun"], ["❓ Inconnu"]]),
+        ("mechanical", "Mécanique", "Type principal de systèmes communs?", [["🔥 Chauffage central", "❄️ CVCA central"], ["🚰 Plomberie commune", "🔀 Plusieurs systèmes"], ["🏠 Systèmes individuels", "❓ Inconnu"]]),
+        ("major_repairs", "Travaux majeurs", "Situation des travaux majeurs?", [["✅ Aucun connu", "🔧 Réalisés récemment"], ["📅 Prévus", "⏳ En cours"], ["❓ Inconnu"]]),
+        ("claims", "Sinistres", "Sinistres ou réclamations importants connus?", [["✅ Aucun", "💧 Infiltration"], ["🔥 Incendie", "🏗 Structure"], ["🔀 Plusieurs", "❓ Inconnu"]]),
+        ("reserve_balance", "Solde du fonds", "Ordre de grandeur du fonds de prévoyance?", [["Moins de 25 k$", "25–100 k$"], ["100–500 k$", "Plus de 500 k$"], ["❓ Inconnu"]]),
+        ("annual_contribution", "Contribution annuelle", "Ordre de grandeur de la contribution annuelle?", [["Moins de 10 k$", "10–25 k$"], ["25–100 k$", "Plus de 100 k$"], ["❓ Inconnu"]]),
         ("financial_records", "Données financières", "États financiers, budgets et placements du fonds disponibles?", YES_NO_UNKNOWN),
         ("previous_study", "Étude antérieure", "Carnet d’entretien ou étude du fonds antérieur disponible?", YES_NO_UNKNOWN),
     ],
@@ -93,7 +100,7 @@ CHECKLISTS = {
 
 
 def _action_keyboard() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(ACTION_BUTTONS, one_time_keyboard=True, resize_keyboard=True)
+    return ReplyKeyboardMarkup(ACTION_BUTTONS, resize_keyboard=True, is_persistent=True)
 
 
 def _type_label(type_id: str) -> str:
@@ -269,7 +276,7 @@ def install_project_workflow() -> None:
         _, label, prompt, options = questions[index]
         keyboard = options or SKIP
         await update.message.reply_text(
-            f"📋 *Project checklist {index + 1}/{len(questions)}*\n*{label}*\n{prompt}\n\nYou may type a detailed answer or skip.",
+            f"📋 *Project checklist {index + 1}/{len(questions)}*\n*{label}*\n{prompt}\n\nSelect one option:",
             parse_mode="Markdown",
             reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True),
         )
@@ -280,8 +287,15 @@ def install_project_workflow() -> None:
         index = int(ctx.user_data.get("checklist_index", 0))
         if index >= len(questions):
             return await _save_project(update, ctx)
-        key, label, _, _ = questions[index]
+        key, label, _, options = questions[index]
         answer = update.message.text.strip()
+        valid_answers = {item for row in (options or SKIP) for item in row}
+        if answer not in valid_answers:
+            await update.message.reply_text(
+                "⚠️ Please use one of the buttons below.",
+                reply_markup=ReplyKeyboardMarkup(options or SKIP, resize_keyboard=True),
+            )
+            return bot.STATE_PROJECT_CHECKLIST
         if answer == "⏭ Passer":
             answer = "Non fourni"
         project = ctx.user_data["new_project"]
@@ -335,9 +349,13 @@ def install_project_workflow() -> None:
             f"✅ *{project.get('name', 'Projet')}*\n"
             f"📍 {project.get('address', '—')}\n"
             f"📋 {_type_label(project.get('inspection_type'))}\n\n"
-            "📸 Send the first inspection photo.",
+            "📸 Send the first inspection photo, or use the buttons below.",
             parse_mode="Markdown",
-            reply_markup=ReplyKeyboardRemove(),
+            reply_markup=ReplyKeyboardMarkup(
+                PHOTO_CONTROL_BUTTONS,
+                resize_keyboard=True,
+                is_persistent=True,
+            ),
         )
         return bot.STATE_PHOTO
 
