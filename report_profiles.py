@@ -116,6 +116,36 @@ PROFILES = {
             "only visible conditions and recorded test evidence"
         ),
     },
+    "loi16": {
+        "label": "Loi 16 – Carnet d’entretien et fonds de prévoyance",
+        "aliases": ("loi 16", "bill 16", "carnet d'entretien", "fonds de prévoyance"),
+        "template": "Template_Facade.docx",
+        "certificate_template": None,
+        "element_types": [
+            ["Toiture", "Façades / Enveloppe"],
+            ["Fenêtres / Portes", "Structure / Fondation"],
+            ["Balcons / Terrasses", "Stationnement"],
+            ["Mécanique", "Électricité / Incendie"],
+            ["Ascenseur", "Aménagement extérieur"],
+            ["Espaces communs", "Autre composante"],
+        ],
+        "building": (
+            "L’immeuble est une copropriété divise. Sa description, ses parties "
+            "communes et les responsabilités d’entretien doivent être confirmées "
+            "à partir de la déclaration de copropriété et des documents disponibles."
+        ),
+        "mandate": (
+            "Le mandat consiste à préparer un carnet d’entretien et les données "
+            "techniques requises pour l’étude du fonds de prévoyance, incluant "
+            "l’inventaire des composantes communes, leur état apparent, leur durée "
+            "de vie restante et la planification des interventions sur 25 ans."
+        ),
+        "ai_context": (
+            "Quebec divided co-ownership Loi 16 maintenance log and reserve fund study; "
+            "describe the visible condition, maintenance need, remaining service-life "
+            "indicators and likely major repair or replacement without inventing costs"
+        ),
+    },
 }
 
 
@@ -177,6 +207,13 @@ def is_anchor(inspection_type: str | None) -> bool:
         "anchor_annual",
         "anchor_5year",
     }
+
+
+def should_issue_certificate(session: dict) -> bool:
+    """BSF owns the existing certificate forms; Metra reports stay separate."""
+    return session.get("company", "bsf") == "bsf" and is_anchor(
+        session.get("inspection_type")
+    )
 
 
 def element_types(inspection_type: str | None) -> list[list[str]]:
@@ -260,4 +297,3 @@ def report_replacements(inspection_type: str | None, groups: list[dict]) -> dict
 
 def certificate_exclusions(groups: list[dict]) -> list[str]:
     return _issues(groups)
-

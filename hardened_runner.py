@@ -97,16 +97,16 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     }
     bot.save_session(chat_id, session)
 
-    buttons = [["📝 Write a report"]]
-    if _is_admin(user_id):
-        buttons.insert(0, ["📁 Define new project"])
-
     await update.message.reply_text(
-        "👷 *BSF Inspections – Report Bot*\n\nWhat would you like to do?",
+        "👷 *Inspection & Report Bot*\n\nSelect the company:",
         parse_mode="Markdown",
-        reply_markup=ReplyKeyboardMarkup(buttons, one_time_keyboard=True, resize_keyboard=True),
+        reply_markup=ReplyKeyboardMarkup(
+            [["🔷 Metra Consultation"], ["🟠 BSF Inspections"]],
+            one_time_keyboard=True,
+            resize_keyboard=True,
+        ),
     )
-    return bot.STATE_MAIN_MENU
+    return bot.STATE_COMPANY
 
 
 async def got_main_menu(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -203,7 +203,11 @@ async def got_group_or_add(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "🆕 New group!\n\n🔩 What *element type* is this?",
             parse_mode="Markdown",
-            reply_markup=ReplyKeyboardMarkup(bot.ELEMENT_TYPES, one_time_keyboard=True, resize_keyboard=True),
+            reply_markup=ReplyKeyboardMarkup(
+                bot.get_element_types_for_session(session),
+                one_time_keyboard=True,
+                resize_keyboard=True,
+            ),
         )
         return bot.STATE_ELEMENT_TYPE
 
@@ -333,9 +337,7 @@ async def _send_report(chat_id: int, session_snapshot: dict, application) -> Non
 
         certificate_failed = False
         certificate_error = ""
-        if bot.report_profiles.is_anchor(
-            session_snapshot.get("inspection_type")
-        ):
+        if bot.report_profiles.should_issue_certificate(session_snapshot):
             try:
                 certificate = await asyncio.to_thread(
                     bot.build_certificate, session_snapshot
@@ -407,7 +409,7 @@ async def _queue_report(update: Update, ctx: ContextTypes.DEFAULT_TYPE, session:
     snapshot = copy.deepcopy(session)
 
     certificate_note = ""
-    if bot.report_profiles.is_anchor(session.get("inspection_type")):
+    if bot.report_profiles.should_issue_certificate(session):
         mode = session.get("certificate_mode", "none")
         certificate_note = (
             "\nCertificate: "
@@ -446,7 +448,7 @@ async def cmd_done(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     inspection_type = session.get("inspection_type", "")
     if (
-        bot.report_profiles.is_anchor(inspection_type)
+        bot.report_profiles.should_issue_certificate(session)
         and not session.get("certificate_mode")
     ):
         exclusions = bot.report_profiles.certificate_exclusions(groups)

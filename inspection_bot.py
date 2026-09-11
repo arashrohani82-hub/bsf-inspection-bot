@@ -48,7 +48,12 @@ anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_KEY)
     STATE_ADMIN_PROJECT_PLANS,
     STATE_ADMIN_PROJECT_DAVIT,
     STATE_CERTIFICATE_DECISION,
-) = range(19)
+    STATE_COMPANY,
+    STATE_METRA_SERVICE,
+    STATE_METRA_SUBTYPE,
+    STATE_PROJECT_CHECKLIST,
+    STATE_PROJECT_ACTION,
+) = range(24)
 
 ELEMENT_TYPES = [
     ["Anchor", "Davit"],
@@ -70,9 +75,9 @@ SEVERITY_MAP = {
 }
 
 BASE_DIR      = Path("/app")
-SESSIONS_DIR  = BASE_DIR / "sessions";  SESSIONS_DIR.mkdir(exist_ok=True)
-PHOTOS_DIR    = BASE_DIR / "photos";    PHOTOS_DIR.mkdir(exist_ok=True)
-REPORTS_DIR   = BASE_DIR / "reports";   REPORTS_DIR.mkdir(exist_ok=True)
+SESSIONS_DIR  = BASE_DIR / "sessions";  SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+PHOTOS_DIR    = BASE_DIR / "photos";    PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
+REPORTS_DIR   = BASE_DIR / "reports";   REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 TEMPLATE_PATH = BASE_DIR / "Template.docx"
 DB_PATH       = BASE_DIR / "projects.json"
 # Fallback: if not in /app, try same directory as this script

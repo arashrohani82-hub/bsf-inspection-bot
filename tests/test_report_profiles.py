@@ -32,6 +32,26 @@ class ReportProfileTests(unittest.TestCase):
             report_profiles.profile_key("anchor_5year"),
             "anchor_5year",
         )
+        self.assertEqual(report_profiles.profile_key("loi16"), "loi16")
+
+    def test_loi16_has_dedicated_component_types(self):
+        elements = report_profiles.element_types("loi16")
+        flattened = [item for row in elements for item in row]
+        self.assertIn("Toiture", flattened)
+        self.assertIn("Façades / Enveloppe", flattened)
+        self.assertIn("Mécanique", flattened)
+
+    def test_only_bsf_anchor_sessions_issue_existing_certificate(self):
+        self.assertTrue(
+            report_profiles.should_issue_certificate(
+                {"company": "bsf", "inspection_type": "anchor_annual"}
+            )
+        )
+        self.assertFalse(
+            report_profiles.should_issue_certificate(
+                {"company": "metra", "inspection_type": "anchor_annual"}
+            )
+        )
 
     def test_unknown_or_empty_type_never_issues_certificate(self):
         for value in (None, "", "Inspection type unavailable"):

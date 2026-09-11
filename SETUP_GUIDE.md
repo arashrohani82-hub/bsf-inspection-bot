@@ -1,4 +1,11 @@
-# BSF Inspections – Telegram Bot Setup Guide
+# Metra / BSF – Telegram Inspection Bot Setup Guide
+
+The same Telegram bot now keeps the two companies separate:
+
+- **BSF Inspections:** preserves the existing façade, parking and anchor report workflows and original BSF certificate forms.
+- **Metra Consultation:** provides dedicated project-definition checklists and Metra draft reports for Loi 122 façades, Loi 122 parking, Loi 16, annual anchor inspections and five-year anchor inspections.
+
+The first `/start` screen asks for the company. Metra then asks for the legal/service family before offering **Define new project** or **Write a report**. Existing BSF projects without a company field remain BSF projects for backward compatibility.
 
 ## What you need (free)
 1. **Telegram Bot Token** — from @BotFather on Telegram

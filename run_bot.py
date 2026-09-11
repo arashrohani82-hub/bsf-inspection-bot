@@ -27,6 +27,8 @@ from high_volume_report import install_high_volume_report
 from large_report_delivery import install_large_report_delivery
 from photo_numbering_runtime import install_photo_numbering
 from project_setup_runtime import install_simple_project_setup
+from project_workflow_runtime import install_project_workflow
+from metra_report_runtime import install_metra_report_runtime
 from report_cleanup import install_report_cleanup
 from runtime_config import install_runtime_config
 
@@ -107,9 +109,11 @@ def main() -> None:
     install_photo_numbering()
     install_continuous_figure_runtime()
     install_simple_project_setup()
+    install_project_workflow()
     install_facade_workflow()
     install_facade_controls()
     install_facade_report_runtime()
+    install_metra_report_runtime()
     install_report_cleanup()
     # Patch the hardened background sender last, after all report builders are final.
     install_large_report_delivery()
@@ -119,6 +123,11 @@ def main() -> None:
     conversation = ConversationHandler(
         entry_points=[CommandHandler("start", bot.cmd_start)],
         states={
+            bot.STATE_COMPANY: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.got_company)],
+            bot.STATE_METRA_SERVICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.got_metra_service)],
+            bot.STATE_METRA_SUBTYPE: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.got_metra_subtype)],
+            bot.STATE_PROJECT_CHECKLIST: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.got_project_checklist)],
+            bot.STATE_PROJECT_ACTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.got_project_action)],
             bot.STATE_MAIN_MENU: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.got_main_menu)],
             bot.STATE_ADMIN_PROJECT_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.admin_got_name)],
             bot.STATE_ADMIN_PROJECT_ADDRESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, bot.admin_got_address)],
