@@ -122,12 +122,16 @@ PROFILES = {
         "template": "Template_Facade.docx",
         "certificate_template": None,
         "element_types": [
-            ["Toiture", "Façades / Enveloppe"],
-            ["Fenêtres / Portes", "Structure / Fondation"],
-            ["Balcons / Terrasses", "Stationnement"],
-            ["Mécanique", "Électricité / Incendie"],
-            ["Ascenseur", "Aménagement extérieur"],
-            ["Espaces communs", "Autre composante"],
+            ["Services professionnels", "Toiture"],
+            ["Toitures-terrasses", "Mécanique"],
+            ["Façades / Enveloppe", "Fenêtres / Portes"],
+            ["Calfeutrages", "Structure / Fondation"],
+            ["Stationnement intérieur", "Balcons / Loggias"],
+            ["Aménagement extérieur", "Aménagement intérieur"],
+            ["Plomberie / Drainage", "Chauffage"],
+            ["Ventilation / Climatisation", "Protection incendie"],
+            ["Électricité / Éclairage", "Ascenseur"],
+            ["Sécurité / Interphone", "Autre composante"],
         ],
         "building": (
             "L’immeuble est une copropriété divise. Sa description, ses parties "

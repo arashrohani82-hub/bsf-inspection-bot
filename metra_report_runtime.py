@@ -270,26 +270,45 @@ def _add_observation_register(doc: Document, session: dict, type_id: str) -> Non
 
 def _add_loi16_tables(doc: Document, session: dict) -> None:
     _add_heading(doc, "5. Planification du carnet d’entretien")
-    rows = []
+    condition_rows = []
+    planning_rows = []
     for index, group in enumerate(session.get("groups", []), 1):
-        rows.append([
+        condition_rows.append([
             str(index),
             group.get("element_type", "Composante"),
+            group.get("location", "À confirmer"),
             _status_summary(group),
+            "À confirmer",
+        ])
+        planning_rows.append([
+            str(index),
+            group.get("element_type", "Composante"),
+            "À confirmer",
             "À confirmer",
             "À confirmer",
             "À confirmer",
         ])
+    paragraph = doc.add_paragraph()
+    paragraph.add_run("Tableau 1A  Inventaire et interventions").bold = True
     _add_table(
         doc,
-        ["ID", "Composante", "État", "Action", "Échéance", "Coût actuel"],
-        rows or [["—", "Inventaire à compléter", "—", "—", "—", "—"]],
-        [0.4, 1.7, 1.1, 1.5, 0.9, 1.1],
+        ["ID", "Composante", "Lieu", "État", "Action recommandée"],
+        condition_rows or [["—", "Inventaire à compléter", "—", "—", "—"]],
+        [0.4, 1.8, 1.3, 1.3, 2.0],
+    )
+    paragraph = doc.add_paragraph()
+    paragraph.add_run("Tableau 1B  Durées de vie et coûts").bold = True
+    _add_table(
+        doc,
+        ["ID", "Composante", "Vie utile", "Âge actuel", "Vie résiduelle", "Coût actuel"],
+        planning_rows or [["—", "Inventaire à compléter", "—", "—", "—", "—"]],
+        [0.4, 2.2, 1.1, 1.0, 1.3, 1.2],
     )
     doc.add_paragraph(
         "À compléter pour chaque composante : quantité, année d’installation, entretien "
-        "préventif, fréquence, durée de vie normale, durée résiduelle, réparation majeure, "
-        "année de remplacement, coût, source du coût et documents de référence."
+        "préventif, fréquence, durée de vie normale, âge actuel, durée résiduelle, réparation "
+        "majeure, année de remplacement, répartition de la dépense, coût, source du coût et "
+        "documents de référence."
     )
 
     _add_heading(doc, "6. Étude du fonds de prévoyance")
@@ -299,16 +318,23 @@ def _add_loi16_tables(doc: Document, session: dict) -> None:
         return item.get("value", "Non fourni") if isinstance(item, dict) else str(item or "Non fourni")
     _add_table(doc, ["Paramètre", "Valeur / hypothèse"], [
         ["Solde initial du fonds", value("reserve_balance")],
+        ["Date du solde initial", value("opening_balance_date")],
         ["Contribution annuelle actuelle", value("annual_contribution")],
-        ["Horizon minimal", "25 ans"],
-        ["Inflation des travaux", "À établir et justifier"],
-        ["Rendement net du fonds", "À établir et justifier"],
-        ["Taxes, honoraires et contingence", "À intégrer selon les hypothèses retenues"],
+        ["Horizon de planification", value("planning_horizon")],
+        ["Année monétaire de référence", value("study_base_year")],
+        ["Inflation des travaux", value("inflation_rate")],
+        ["Rendement net du fonds", value("interest_rate")],
+        ["Indexation des cotisations", value("contribution_growth")],
+        ["Cotisations spéciales", value("special_assessments")],
+        ["Dépenses majeures déjà planifiées", value("planned_expenses")],
+        ["Base des coûts", value("cost_basis")],
+        ["Scénarios financiers demandés", value("scenario_count")],
     ])
     doc.add_paragraph(
         "Équation annuelle à valider : solde de fermeture = solde d’ouverture + contributions "
         "+ rendement net − dépenses planifiées. Un tableau annuel et la contribution recommandée "
-        "doivent être joints à la version finale."
+        "doivent être joints à la version finale. Chaque scénario doit présenter, année par année, "
+        "le solde d’ouverture, les cotisations, le rendement, les dépenses et le solde de fermeture."
     )
 
 

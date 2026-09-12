@@ -95,6 +95,16 @@ CHECKLISTS = {
         ("annual_contribution", "Contribution annuelle", "Ordre de grandeur de la contribution annuelle?", [["Moins de 10 k$", "10–25 k$"], ["25–100 k$", "Plus de 100 k$"], ["❓ Inconnu"]]),
         ("financial_records", "Données financières", "États financiers, budgets et placements du fonds disponibles?", YES_NO_UNKNOWN),
         ("previous_study", "Étude antérieure", "Carnet d’entretien ou étude du fonds antérieur disponible?", YES_NO_UNKNOWN),
+        ("study_base_year", "Année de référence", "Quelle année monétaire doit servir de référence aux coûts?", [["Année courante", "Année précédente"], ["Selon étude antérieure", "❓ À confirmer"]]),
+        ("planning_horizon", "Horizon de planification", "Quel horizon doit être présenté dans l’étude?", [["25 ans", "30 ans"], ["Plus de 30 ans", "❓ À confirmer"]]),
+        ("interest_rate", "Rendement du fonds", "Quel taux de rendement annuel doit être analysé?", [["0 %", "1 %"], ["2 %", "3 %"], ["Scénarios multiples", "❓ À confirmer"]]),
+        ("inflation_rate", "Inflation des travaux", "Quel taux annuel d’inflation des travaux doit être analysé?", [["2 %", "2,5 %"], ["3 %", "4 %"], ["Scénarios multiples", "❓ À confirmer"]]),
+        ("contribution_growth", "Indexation des cotisations", "Quelle hausse annuelle des cotisations doit être évaluée?", [["0 %", "2,5 %"], ["5 %", "Hausse graduelle sur 5 ans"], ["Hausse graduelle sur 10 ans", "Scénarios multiples"], ["❓ À confirmer"]]),
+        ("opening_balance_date", "Date du solde initial", "À quelle date correspond le solde initial du fonds?", [["Début d’exercice", "Fin d’exercice"], ["Date des états financiers", "❓ À confirmer"]]),
+        ("special_assessments", "Cotisations spéciales", "Des cotisations spéciales sont-elles prévues ou en cours?", YES_NO_UNKNOWN),
+        ("planned_expenses", "Dépenses planifiées", "Des dépenses majeures sont-elles déjà budgétées?", YES_NO_UNKNOWN),
+        ("cost_basis", "Base des coûts", "Que doivent inclure les coûts de planification?", [["Travaux seulement", "Travaux + taxes"], ["Travaux + honoraires"], ["Travaux + taxes + honoraires + contingence"], ["❓ À confirmer"]]),
+        ("scenario_count", "Scénarios financiers", "Combien de scénarios de financement faut-il présenter?", [["1 scénario", "2 scénarios"], ["3 scénarios", "❓ À confirmer"]]),
     ],
 }
 

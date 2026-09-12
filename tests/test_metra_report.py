@@ -50,6 +50,10 @@ class MetraReportTests(unittest.TestCase):
                 "project_fields": {
                     "units": {"label": "Unités", "value": "8"},
                     "reserve_balance": {"label": "Solde du fonds", "value": "25 000 $"},
+                    "planning_horizon": {"label": "Horizon", "value": "25 ans"},
+                    "inflation_rate": {"label": "Inflation", "value": "2,5 %"},
+                    "interest_rate": {"label": "Rendement", "value": "2 %"},
+                    "scenario_count": {"label": "Scénarios", "value": "2 scénarios"},
                 },
                 "groups": [{
                     "element_type": "Toiture",
@@ -65,6 +69,9 @@ class MetraReportTests(unittest.TestCase):
             self.assertIn("Étude du fonds de prévoyance", full_text)
             table_text = "\n".join(cell.text for table in document.tables for row in table.rows for cell in row.cells)
             self.assertIn("25 000 $", table_text)
+            self.assertIn("2,5 %", table_text)
+            self.assertIn("2 scénarios", table_text)
+            self.assertIn("Vie résiduelle", table_text)
             self.assertIn("Toiture", table_text)
 
 
