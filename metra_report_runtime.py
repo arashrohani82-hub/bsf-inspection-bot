@@ -409,6 +409,11 @@ def _add_conclusion(doc: Document, session: dict, heading_number: int) -> None:
 def build_metra_report(session: dict, lang: str = "fr") -> Path:
     type_id = bot.report_profiles.profile_key(session.get("inspection_type"))
     profile = bot.report_profiles.profile(type_id)
+    if type_id == "loi16":
+        from loi16_report import build_loi16_report
+        date = session.get("date", datetime.today().strftime("%Y-%m-%d"))
+        output = bot.REPORTS_DIR / f"{_safe_name(session.get('project_name', 'Projet'))}_METRA_loi16_{_safe_name(str(date))}_FR.docx"
+        return build_loi16_report(session, output)
     doc = Document()
     doc.core_properties.author = "Metra Consultation Inc."
     doc.core_properties.title = profile["label"]
@@ -437,6 +442,16 @@ def build_metra_report(session: dict, lang: str = "fr") -> Path:
 
 def install_metra_report_runtime() -> None:
     original_build_report = bot.build_report
+    original_pdf = bot.docx_to_pdf
+
+    def docx_to_pdf(docx_path, pdf_path):
+        import shutil
+        source = Path(docx_path).with_suffix(".pdf")
+        if source.exists() and Document(docx_path).core_properties.subject == "metra-loi16-v1":
+            if source.resolve() != Path(pdf_path).resolve():
+                shutil.copyfile(source, pdf_path)
+            return
+        return original_pdf(docx_path, pdf_path)
 
     def build_report(session: dict, lang: str):
         if session.get("company") == "metra":
@@ -444,3 +459,4 @@ def install_metra_report_runtime() -> None:
         return original_build_report(session, lang)
 
     bot.build_report = build_report
+    bot.docx_to_pdf = docx_to_pdf
