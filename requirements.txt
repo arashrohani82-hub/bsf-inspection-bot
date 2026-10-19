@@ -5,3 +5,4 @@ pillow
 requests
 reportlab
 fpdf2
+CairoSVG

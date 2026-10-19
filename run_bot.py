@@ -29,6 +29,7 @@ from photo_numbering_runtime import install_photo_numbering
 from project_setup_runtime import install_simple_project_setup
 from project_workflow_runtime import install_project_workflow
 from metra_report_runtime import install_metra_report_runtime
+from loi16_workflow import install_loi16_workflow
 from report_cleanup import install_report_cleanup
 from runtime_config import install_runtime_config
 
@@ -122,6 +123,7 @@ def main() -> None:
     install_facade_controls()
     install_facade_report_runtime()
     install_metra_report_runtime()
+    install_loi16_workflow()
     install_report_cleanup()
     # Patch the hardened background sender last, after all report builders are final.
     install_large_report_delivery()
