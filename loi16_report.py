@@ -11,6 +11,9 @@ from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+import reportlab
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image
@@ -23,6 +26,20 @@ import re
 NAVY = colors.HexColor("#102f50")
 GOLD = colors.HexColor("#efa916")
 LOGO = Path(__file__).parent / "assets" / "metra-logo.png"
+# Embed the fonts shipped with ReportLab so PDF viewers do not substitute them.
+FONT = "MetraVera"
+FONT_BOLD = "MetraVera-Bold"
+
+
+def register_fonts():
+    fonts = Path(reportlab.__file__).parent / "fonts"
+    for name, filename in ((FONT, "Vera.ttf"), (FONT_BOLD, "VeraBd.ttf")):
+        if name not in pdfmetrics.getRegisteredFontNames():
+            pdfmetrics.registerFont(TTFont(name, str(fonts / filename)))
+    pdfmetrics.registerFontFamily(FONT, normal=FONT, bold=FONT_BOLD,
+                                  italic=FONT, boldItalic=FONT_BOLD)
+
+
 RULE_URL = "https://www.legisquebec.gouv.qc.ca/fr/document/rc/CCQ,%20r.%208.01"
 
 
@@ -42,18 +59,45 @@ class Report:
         self.doc.core_properties.subject = "metra-loi16-v1"
         section = self.doc.sections[0]
         section.page_width, section.page_height = Inches(8.5), Inches(11)
-        section.top_margin = section.bottom_margin = Inches(.7)
+        section.top_margin = Inches(1.25)
+        section.bottom_margin = Inches(.85)
+        section.header_distance = Inches(.25)
+        section.footer_distance = Inches(.3)
         section.left_margin = section.right_margin = Inches(.65)
         self.doc.styles["Normal"].font.name = "Arial"
         self.doc.styles["Normal"].font.size = Pt(10)
         self.doc.styles["Normal"].paragraph_format.space_after = Pt(7)
+        # Keep the Word export branded too; do not copy legacy OIQ marks.
+        header = section.header.add_table(rows=1, cols=2, width=Inches(7.2))
+        header.columns[0].width = Inches(1.0)
+        header.columns[1].width = Inches(6.2)
+        if LOGO.is_file():
+            header.cell(0, 0).paragraphs[0].add_run().add_picture(str(LOGO), width=Inches(.65))
+        hp = header.cell(0, 1).paragraphs[0]
+        hp.alignment = 2
+        hp.add_run("METRA CONSULTATION INC.").bold = True
+        hp.add_run("\nÉtude du fonds de prévoyance et carnet d’entretien")
+        for run in hp.runs:
+            run.font.size = Pt(9)
+        section.header.paragraphs[0].paragraph_format.space_after = Pt(0)
+        section.header.paragraphs[0].paragraph_format.line_spacing = Pt(1)
         footer = section.footer.paragraphs[0]
-        footer.add_run("Metra Consultation Inc. | Ébauche à valider | Page ").font.size = Pt(8)
+        footer.alignment = 1
+        footer.add_run("Metra Consultation Inc. | metraconsultation.ca\n")
+        footer.add_run("a.rohani@metraconsultation.ca | 438 867-4131\n")
+        footer.add_run("Ébauche à valider | Page ")
         field = OxmlElement("w:fldSimple")
         field.set(qn("w:instr"), "PAGE")
         footer._p.append(field)
+        for run in footer.runs:
+            run.font.size = Pt(8)
+        footer.paragraph_format.space_after = Pt(0)
+        register_fonts()
         self.styles = getSampleStyleSheet()
-        self.styles["BodyText"].fontName = "Helvetica"
+        for style in self.styles.byName.values():
+            style.fontName = FONT
+        self.styles["Heading1"].fontName = FONT_BOLD
+        self.styles["Heading2"].fontName = FONT_BOLD
         self.styles["BodyText"].fontSize = 9
         self.styles["BodyText"].leading = 13
         self.styles["BodyText"].spaceAfter = 8
@@ -111,7 +155,7 @@ class Report:
                         run.font.size = Pt(8)
                         run.bold = index == 0
         style = self.styles["BodyText"].clone("cell")
-        style.fontSize, style.leading, style.spaceAfter = 7, 9, 0
+        style.fontSize, style.leading, style.spaceAfter = 7.5, 10, 0
         values = [[Paragraph(escape(str(c)).replace("\n", "<br/>"), style) for c in r] for r in [headers] + rows]
         table = Table(values, colWidths=[518 / len(headers)] * len(headers), repeatRows=1, hAlign="LEFT")
         table.setStyle(TableStyle([
@@ -133,15 +177,15 @@ class Report:
         for amount in (low, (high + low) / 2, high):
             y = xy(0, amount, 2)[1]
             drawing.add(Line(65, y, 485, y, strokeColor=colors.lightgrey, strokeWidth=.5))
-            drawing.add(String(0, y - 2, f"{amount:,.0f} $".replace(",", " "), fontSize=8))
+            drawing.add(String(0, y - 2, f"{amount:,.0f} $".replace(",", " "), fontSize=8, fontName=FONT))
         for index, (name, rows) in enumerate(scenarios):
             points = [coord for i, row in enumerate(rows) for coord in xy(i, row["closing"], len(rows))]
             color = NAVY if index == 0 else GOLD
             drawing.add(PolyLine(points, strokeColor=color, strokeWidth=2))
-            drawing.add(String(65 + index * 225, 12, name, fontSize=8, fillColor=color))
+            drawing.add(String(65 + index * 225, 12, name, fontSize=8, fontName=FONT, fillColor=color))
         rows = scenarios[0][1]
-        drawing.add(String(65, 28, str(rows[0]["year"]), fontSize=8))
-        drawing.add(String(460, 28, str(rows[-1]["year"]), fontSize=8))
+        drawing.add(String(65, 28, str(rows[0]["year"]), fontSize=8, fontName=FONT))
+        drawing.add(String(460, 28, str(rows[-1]["year"]), fontSize=8, fontName=FONT))
         self.story.append(drawing)
         # DOCX embeds a PNG generated with the bundled graphics renderer.
         try:
@@ -155,15 +199,33 @@ class Report:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         self.doc.save(path)
-        def footer(canvas, doc):
-            canvas.setFont("Helvetica", 8)
-            canvas.setFillColor(NAVY)
-            canvas.drawString(47, 24, "Metra Consultation Inc. | Ébauche à valider")
-            canvas.drawRightString(565, 24, f"Page {doc.page}")
+        def stationery(canvas, doc):
+            # Isolate graphics/text state from body flowables and later pages.
+            canvas.saveState()
+            try:
+                canvas.setFillColor(NAVY)
+                if LOGO.is_file():
+                    canvas.drawImage(str(LOGO), 47, 727, width=48, height=48,
+                                     preserveAspectRatio=True, mask="auto")
+                canvas.setFont(FONT_BOLD, 10)
+                canvas.drawRightString(565, 760, "METRA CONSULTATION INC.")
+                canvas.setFont(FONT, 8)
+                canvas.drawRightString(565, 744, "Étude du fonds de prévoyance et carnet d’entretien")
+                canvas.setStrokeColor(GOLD)
+                canvas.setLineWidth(1)
+                canvas.line(47, 718, 565, 718)
+                canvas.line(47, 57, 565, 57)
+                canvas.setFont(FONT, 7.5)
+                canvas.drawString(47, 43, "Metra Consultation Inc. | metraconsultation.ca")
+                canvas.drawRightString(565, 43, "438 867-4131")
+                canvas.drawString(47, 29, "a.rohani@metraconsultation.ca | Ébauche à valider")
+                canvas.drawRightString(565, 29, f"Page {doc.page}")
+            finally:
+                canvas.restoreState()
         SimpleDocTemplate(str(path.with_suffix(".pdf")), pagesize=(612, 792),
-                          leftMargin=47, rightMargin=47, topMargin=45, bottomMargin=45,
+                          leftMargin=47, rightMargin=47, topMargin=90, bottomMargin=76,
                           title=self.doc.core_properties.title, author="Metra Consultation Inc.").build(
-                              self.story, onFirstPage=footer, onLaterPages=footer)
+                              self.story, onFirstPage=stationery, onLaterPages=stationery)
         return path
 
 
@@ -171,8 +233,6 @@ def build_loi16_report(session, path):
     r = Report()
     groups = session.get("groups", [])
     data = session.get("reserve_fund", {})
-    if LOGO.exists():
-        r.photo(LOGO, width=1.8)
     r.text("Étude du fonds de prévoyance et carnet d’entretien", 1)
     r.text("METRA CONSULTATION INC.")
     if session.get("demonstration"):
